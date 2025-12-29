@@ -2,19 +2,16 @@
 
 import { useState } from 'react';
 import AppHeader from '@/components/app-header';
-import CsvImporter from '@/components/csv-importer';
+import FileImporter from '@/components/file-importer';
 import CallListTable from '@/components/call-list-table';
 import { Toaster } from '@/components/ui/toaster';
 import type { Donor } from '@/lib/types';
-import { mockDonors } from '@/lib/data';
 
 export default function Home() {
   const [donors, setDonors] = useState<Donor[] | null>(null);
 
-  const handleImport = () => {
-    // In a real app, this would parse a CSV file.
-    // For now, we just load the mock data.
-    setDonors(mockDonors);
+  const handleImport = (importedDonors: Donor[]) => {
+    setDonors(importedDonors);
   };
 
   const handleNewImport = () => {
@@ -35,7 +32,7 @@ export default function Home() {
         {donors ? (
           <CallListTable donors={donors} onUpdateDonor={updateDonor} />
         ) : (
-          <CsvImporter onImport={handleImport} />
+          <FileImporter onImport={handleImport} />
         )}
       </main>
       <Toaster />
