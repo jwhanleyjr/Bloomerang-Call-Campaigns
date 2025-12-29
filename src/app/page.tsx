@@ -7,9 +7,26 @@ import { Toaster } from '@/components/ui/toaster';
 import type { Donor, Campaign } from '@/lib/types';
 import CampaignDashboard from '@/components/campaign-dashboard';
 import CallListTable from '@/components/call-list-table';
+import { mockDonors } from '@/lib/data';
+
+const initialCampaigns: Campaign[] = [
+  {
+    id: 'camp-1',
+    name: 'Christmas Thank You',
+    donors: mockDonors.slice(0, 4),
+    createdAt: new Date('2023-12-26'),
+  },
+  {
+    id: 'camp-2',
+    name: 'Spring Fundraiser 2024',
+    donors: mockDonors.slice(4),
+    createdAt: new Date('2024-04-15'),
+  },
+];
+
 
 export default function Home() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
   const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null);
 
   const handleNewCampaign = (newCampaign: Campaign) => {
