@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -13,11 +14,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Phone, CheckCircle, XCircle, Clock } from 'lucide-react';
 import InteractionLogger from './interaction-logger';
-import type { Donor, Interaction } from '@/lib/types';
+import type { Donor, Interaction, Campaign } from '@/lib/types';
 import { formatDistanceToNow } from 'date-fns';
+import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 
 type CallListTableProps = {
-  donors: Donor[];
+  campaign: Campaign;
   onUpdateDonor: (donor: Donor) => void;
 };
 
@@ -39,8 +42,13 @@ const statusConfig = {
   },
 };
 
+function calculateProgress(donors: Donor[]): number {
+  if (donors.length === 0) return 0;
+  const completedCount = donors.filter(d => d.status === 'completed').length;
+  return (completedCount / donors.length) * 100;
+}
 
-export default function CallListTable({ donors, onUpdateDonor }: CallListTableProps) {
+export default function CallListTable({ campaign, onUpdateDonor }: CallListTableProps) {
   const [selectedDonor, setSelectedDonor] = useState<Donor | null>(null);
   const [isLoggerOpen, setIsLoggerOpen] = useState(false);
 
@@ -64,9 +72,33 @@ export default function CallListTable({ donors, onUpdateDonor }: CallListTablePr
     onUpdateDonor(updatedDonor);
     handleLoggerClose();
   };
+  
+  const progress = calculateProgress(campaign.donors);
 
   return (
     <>
+      <div className="mb-6">
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-2xl font-headline mb-1">{campaign.name}</CardTitle>
+                <CardDescription>
+                  {campaign.donors.length} donors to call. Log your interactions below.
+                </CardDescription>
+              </div>
+              <div className="w-1/4">
+                 <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium text-muted-foreground">Progress</span>
+                    <span className="text-sm font-bold text-primary">{Math.round(progress)}%</span>
+                 </div>
+                <Progress value={progress} className="w-full" />
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+      </div>
+
       <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
         <Table>
           <TableHeader className="sticky top-16 bg-card z-10">
@@ -80,7 +112,7 @@ export default function CallListTable({ donors, onUpdateDonor }: CallListTablePr
             </TableRow>
           </TableHeader>
           <TableBody>
-            {donors.map((donor) => {
+            {campaign.donors.map((donor) => {
               const status = statusConfig[donor.status];
               return (
                 <TableRow key={donor.id}>

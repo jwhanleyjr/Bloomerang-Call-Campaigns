@@ -1,38 +1,60 @@
+
 "use client";
 
 import { useState } from 'react';
 import AppHeader from '@/components/app-header';
-import FileImporter from '@/components/file-importer';
-import CallListTable from '@/components/call-list-table';
 import { Toaster } from '@/components/ui/toaster';
-import type { Donor } from '@/lib/types';
+import type { Donor, Campaign } from '@/lib/types';
+import CampaignDashboard from '@/components/campaign-dashboard';
+import CallListTable from '@/components/call-list-table';
 
 export default function Home() {
-  const [donors, setDonors] = useState<Donor[] | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [activeCampaign, setActiveCampaign] = useState<Campaign | null>(null);
 
-  const handleImport = (importedDonors: Donor[]) => {
-    setDonors(importedDonors);
+  const handleNewCampaign = (newCampaign: Campaign) => {
+    setCampaigns(prev => [...prev, newCampaign]);
+    setActiveCampaign(newCampaign);
+  };
+  
+  const handleSelectCampaign = (campaign: Campaign) => {
+    setActiveCampaign(campaign);
   };
 
-  const handleNewImport = () => {
-    setDonors(null);
+  const handleBackToDashboard = () => {
+    setActiveCampaign(null);
   };
 
-  const updateDonor = (updatedDonor: Donor) => {
-    setDonors(prevDonors => {
-      if (!prevDonors) return null;
-      return prevDonors.map(donor => donor.id === updatedDonor.id ? updatedDonor : donor);
-    });
+  const updateDonorInCampaign = (updatedDonor: Donor) => {
+    if (!activeCampaign) return;
+
+    const updatedDonors = activeCampaign.donors.map(donor => 
+      donor.id === updatedDonor.id ? updatedDonor : donor
+    );
+    
+    const updatedCampaign = { ...activeCampaign, donors: updatedDonors };
+
+    setActiveCampaign(updatedCampaign);
+    setCampaigns(prevCampaigns => 
+      prevCampaigns.map(c => c.id === updatedCampaign.id ? updatedCampaign : c)
+    );
   };
 
   return (
     <div className="flex flex-col min-h-screen">
-      <AppHeader onNewImport={handleNewImport} hasData={!!donors} />
+      <AppHeader onBackToDashboard={handleBackToDashboard} hasActiveCampaign={!!activeCampaign} />
       <main className="flex-grow container mx-auto px-4 py-8">
-        {donors ? (
-          <CallListTable donors={donors} onUpdateDonor={updateDonor} />
+        {activeCampaign ? (
+          <CallListTable 
+            campaign={activeCampaign} 
+            onUpdateDonor={updateDonorInCampaign} 
+          />
         ) : (
-          <FileImporter onImport={handleImport} />
+          <CampaignDashboard 
+            campaigns={campaigns}
+            onNewCampaign={handleNewCampaign}
+            onSelectCampaign={handleSelectCampaign}
+          />
         )}
       </main>
       <Toaster />

@@ -1,12 +1,13 @@
-import { HandCoins, Upload } from 'lucide-react';
+
+import { HandCoins, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 type AppHeaderProps = {
-  onNewImport: () => void;
-  hasData: boolean;
+  onBackToDashboard: () => void;
+  hasActiveCampaign: boolean;
 };
 
-export default function AppHeader({ onNewImport, hasData }: AppHeaderProps) {
+export default function AppHeader({ onBackToDashboard, hasActiveCampaign }: AppHeaderProps) {
   return (
     <header className="bg-card border-b sticky top-0 z-10">
       <div className="container mx-auto px-4">
@@ -19,10 +20,10 @@ export default function AppHeader({ onNewImport, hasData }: AppHeaderProps) {
               Bloomerang Call Campaign
             </h1>
           </div>
-          {hasData && (
-            <Button onClick={onNewImport} variant="outline">
-              <Upload className="mr-2 h-4 w-4" />
-              Import New List
+          {hasActiveCampaign && (
+            <Button onClick={onBackToDashboard} variant="outline">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Campaigns
             </Button>
           )}
         </div>

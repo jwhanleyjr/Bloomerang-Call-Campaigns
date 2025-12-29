@@ -1,3 +1,4 @@
+
 export type CallOutcome = 'completed' | 'left-vm' | 'no-answer' | 'bad-number' | null;
 
 export type Interaction = {
@@ -19,4 +20,11 @@ export type Donor = {
   lastInteraction: Interaction | null;
   totalDonations: number;
   lastDonationDate: Date;
+};
+
+export type Campaign = {
+  id: string;
+  name: string;
+  donors: Donor[];
+  createdAt: Date;
 };
