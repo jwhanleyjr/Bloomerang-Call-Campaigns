@@ -60,15 +60,9 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
           const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet, {
-            // If the first data row is a total, it often has different data types.
-            // We can ask XLSX to guess, but we'll add our own filtering.
-          }) as any[];
+          const json = XLSX.utils.sheet_to_json(worksheet) as any[];
           
-          // Skip the first row if it's a total, and filter for valid donors.
-          const processedData = json.length > 1 ? json.slice(1) : json;
-
-          const donors: Donor[] = processedData.map((row) => {
+          const donors: Donor[] = json.map((row) => {
             const donor: Partial<Donor> = { status: 'pending', lastInteraction: null };
             for (const excelHeader in headerMapping) {
               if (row[excelHeader] !== undefined) {
