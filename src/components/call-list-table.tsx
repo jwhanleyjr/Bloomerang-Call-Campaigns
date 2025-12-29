@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Phone, CheckCircle, XCircle, Clock, Users, User, UploadCloud, Loader2 } from 'lucide-react';
+import { Phone, CheckCircle, XCircle, Clock, Users, User, UploadCloud, Loader2, CalendarClock } from 'lucide-react';
 import InteractionLogger from './interaction-logger';
 import type { Donor, Interaction, Campaign } from '@/lib/types';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -53,6 +53,11 @@ const statusConfig = {
     icon: <XCircle className="w-4 h-4 text-destructive" />,
     badgeVariant: 'destructive',
   },
+  'follow-up': {
+    label: 'Follow-up',
+    icon: <CalendarClock className="w-4 h-4 text-accent-foreground" />,
+    badgeVariant: 'accent',
+  }
 };
 
 function calculateProgress(donors: Donor[]): number {
@@ -110,9 +115,10 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
   };
 
   const handleInteractionLogged = (donor: Donor, interaction: Interaction) => {
+    const newStatus = interaction.followUpDate ? 'follow-up' : 'completed';
     const updatedDonor = {
       ...donor,
-      status: 'completed',
+      status: newStatus,
       lastInteraction: interaction,
     } as Donor;
     onUpdateDonor(updatedDonor);
@@ -123,7 +129,7 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
     setIsSyncing(true);
     const interactionsToSync = campaign.donors
       .map(d => d.lastInteraction)
-      .filter((i): i is Interaction => i !== null);
+      .filter((i): i is Interaction => !!i);
 
     if (interactionsToSync.length === 0) {
       toast({
@@ -191,7 +197,7 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
           )}
         </TableCell>
         <TableCell className="text-right font-mono">
-          ${(donor.givingSummary.totalDonations || 0).toLocaleString()}
+          ${(donor.givingSummary?.totalDonations || 0).toLocaleString()}
         </TableCell>
         <TableCell className="text-right">
           <Button variant="outline" size="sm" onClick={() => handleLogRowClick(donor)}>

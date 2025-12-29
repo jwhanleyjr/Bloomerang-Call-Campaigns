@@ -159,17 +159,17 @@ export default function InteractionLogger({ isOpen, onClose, donor, onInteractio
                 <StatCard 
                   icon={<Gift className="w-5 h-5" />}
                   label="Last Gift"
-                  value={`$${donor.givingSummary.lastDonationAmount.toLocaleString()}`}
+                  value={`$${(donor.givingSummary.lastDonationAmount || 0).toLocaleString()}`}
                 />
                  <StatCard 
                   icon={<TrendingUp className="w-5 h-5" />}
                   label="Avg. Gift"
-                  value={`$${donor.givingSummary.averageGift.toLocaleString()}`}
+                  value={`$${(donor.givingSummary.averageGift || 0).toLocaleString()}`}
                 />
                  <StatCard 
                   icon={<DollarSign className="w-5 h-5" />}
                   label="Total Giving"
-                  value={`$${donor.givingSummary.totalDonations.toLocaleString()}`}
+                  value={`$${(donor.givingSummary.totalDonations || 0).toLocaleString()}`}
                 />
               </div>
             </CardContent>

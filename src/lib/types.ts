@@ -1,5 +1,6 @@
 
 
+
 export type CallOutcome = 'completed' | 'left-vm' | 'no-answer' | 'bad-number' | null;
 
 export type Interaction = {
@@ -25,7 +26,7 @@ export type Donor = {
   phone: string;
   email: string;
   address?: string;
-  status: 'pending' | 'completed' | 'skipped';
+  status: 'pending' | 'completed' | 'skipped' | 'follow-up';
   lastInteraction: Interaction | null;
   givingSummary: GivingSummary;
   householdId?: string;
