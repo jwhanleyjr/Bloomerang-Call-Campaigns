@@ -32,7 +32,7 @@ export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCa
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <h2 className="text-3xl font-bold tracking-tight font-headline">Campaigns</h2>
         <Button onClick={() => setIsImporterOpen(true)}>
           <PlusCircle className="mr-2" />
@@ -74,7 +74,7 @@ export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCa
           })}
         </div>
       ) : (
-        <div className="text-center py-20 px-6 border-2 border-dashed rounded-lg">
+        <div className="text-center py-12 md:py-20 px-6 border-2 border-dashed rounded-lg">
             <div className="mx-auto bg-secondary p-4 rounded-full w-fit mb-4">
                 <FolderKanban className="w-12 h-12 text-primary" />
             </div>

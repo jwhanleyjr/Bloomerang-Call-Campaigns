@@ -80,14 +80,14 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
       <div className="mb-6">
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-start">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
                 <CardTitle className="text-2xl font-headline mb-1">{campaign.name}</CardTitle>
                 <CardDescription>
                   {campaign.donors.length} donors to call. Log your interactions below.
                 </CardDescription>
               </div>
-              <div className="w-1/4">
+              <div className="w-full md:w-1/4">
                  <div className="flex justify-between items-center mb-1">
                     <span className="text-sm font-medium text-muted-foreground">Progress</span>
                     <span className="text-sm font-bold text-primary">{Math.round(progress)}%</span>
@@ -99,11 +99,11 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
         </Card>
       </div>
 
-      <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-        <Table>
-          <TableHeader className="sticky top-16 bg-card z-10">
+      <div className="rounded-lg border bg-card text-card-foreground shadow-sm overflow-x-auto">
+        <Table className="w-full min-w-[640px]">
+          <TableHeader className="sticky top-0 bg-card z-10">
             <TableRow className="hover:bg-card">
-              <TableHead className="w-[250px]">Name</TableHead>
+              <TableHead className="w-[200px]">Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Last Interaction</TableHead>

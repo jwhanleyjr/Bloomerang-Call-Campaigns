@@ -16,14 +16,15 @@ export default function AppHeader({ onBackToDashboard, hasActiveCampaign }: AppH
             <div className="bg-primary text-primary-foreground p-2 rounded-lg">
               <HandCoins className="w-6 h-6" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-primary font-headline">
-              Bloomerang Call Campaign
+            <h1 className="text-lg md:text-xl font-bold tracking-tight text-primary font-headline">
+              Bloomerang Calls
             </h1>
           </div>
           {hasActiveCampaign && (
-            <Button onClick={onBackToDashboard} variant="outline">
+            <Button onClick={onBackToDashboard} variant="outline" size="sm">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Campaigns
+              <span className="hidden sm:inline">Back to Campaigns</span>
+              <span className="inline sm:hidden">Back</span>
             </Button>
           )}
         </div>
