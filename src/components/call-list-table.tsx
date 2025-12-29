@@ -142,7 +142,7 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
                     )}
                   </TableCell>
                   <TableCell className="text-right font-mono">
-                    ${donor.totalDonations.toLocaleString()}
+                    ${(donor.totalDonations || 0).toLocaleString()}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button variant="outline" size="sm" onClick={() => handleLogRowClick(donor)}>
