@@ -1,4 +1,5 @@
 
+
 export type CallOutcome = 'completed' | 'left-vm' | 'no-answer' | 'bad-number' | null;
 
 export type Interaction = {
@@ -11,15 +12,24 @@ export type Interaction = {
   loggedBy: string; // For audit trail
 };
 
+export type GivingSummary = {
+    totalDonations: number;
+    lastDonationDate: Date | null;
+    lastDonationAmount: number;
+    averageGift: number;
+};
+
 export type Donor = {
   id: string; // Bloomerang Constituent ID
   name: string;
   phone: string;
   email: string;
+  address?: string;
   status: 'pending' | 'completed' | 'skipped';
   lastInteraction: Interaction | null;
-  totalDonations: number;
-  lastDonationDate: Date;
+  givingSummary: GivingSummary;
+  householdId?: string;
+  householdName?: string;
 };
 
 export type Campaign = {

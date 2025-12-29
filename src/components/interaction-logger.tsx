@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -21,11 +22,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { Calendar as CalendarIcon, Wand2, Loader2, Save } from 'lucide-react';
+import { Calendar as CalendarIcon, Wand2, Loader2, Save, Gift, TrendingUp, DollarSign } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { Donor, Interaction } from '@/lib/types';
 import { getAiSuggestion, logInteraction } from '@/app/actions';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 
 const interactionSchema = z.object({
   outcome: z.enum(['completed', 'left-vm', 'no-answer', 'bad-number'], {
@@ -44,6 +47,14 @@ type InteractionLoggerProps = {
   donor: Donor;
   onInteractionLogged: (donor: Donor, interaction: Interaction) => void;
 };
+
+const StatCard = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) => (
+  <div className="flex flex-col items-center justify-center p-3 text-center bg-muted/50 rounded-lg">
+    <div className="text-primary">{icon}</div>
+    <p className="text-sm font-semibold mt-1">{value}</p>
+    <p className="text-xs text-muted-foreground">{label}</p>
+  </div>
+);
 
 export default function InteractionLogger({ isOpen, onClose, donor, onInteractionLogged }: InteractionLoggerProps) {
   const { toast } = useToast();
@@ -136,12 +147,39 @@ export default function InteractionLogger({ isOpen, onClose, donor, onInteractio
         <SheetHeader className="p-6 pb-4">
           <SheetTitle>Log Interaction: {donor.name}</SheetTitle>
           <SheetDescription>
-            Record the details of your call. Use the AI assistant to help write your notes.
+            {donor.address}
           </SheetDescription>
         </SheetHeader>
+        
+        <div className="px-6">
+          <Card>
+            <CardContent className="p-3">
+              <p className="text-sm font-medium mb-3 text-secondary-foreground">Giving Summary</p>
+              <div className="grid grid-cols-3 gap-3">
+                <StatCard 
+                  icon={<Gift className="w-5 h-5" />}
+                  label="Last Gift"
+                  value={`$${donor.givingSummary.lastDonationAmount.toLocaleString()}`}
+                />
+                 <StatCard 
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  label="Avg. Gift"
+                  value={`$${donor.givingSummary.averageGift.toLocaleString()}`}
+                />
+                 <StatCard 
+                  icon={<DollarSign className="w-5 h-5" />}
+                  label="Total Giving"
+                  value={`$${donor.givingSummary.totalDonations.toLocaleString()}`}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col justify-between">
-            <div className="px-6 overflow-y-auto space-y-6 flex-grow">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex-1 flex flex-col justify-between overflow-hidden">
+            <div className="px-6 py-4 space-y-6 overflow-y-auto flex-grow">
               <FormField
                 control={form.control}
                 name="outcome"
@@ -186,7 +224,7 @@ export default function InteractionLogger({ isOpen, onClose, donor, onInteractio
                       </Button>
                     </div>
                     <FormControl>
-                      <Textarea placeholder="e.g., Confirmed new address, seems happy with our work..." {...field} rows={6} />
+                      <Textarea placeholder="e.g., Confirmed new address, seems happy with our work..." {...field} rows={5} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

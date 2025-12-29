@@ -5,10 +5,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FileUp, FileCheck2, ArrowRight } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { FileUp, FileCheck2, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { useState, useRef, useTransition } from 'react';
 import * as XLSX from 'xlsx';
 import type { Donor, Campaign } from '@/lib/types';
+import { enrichDonors } from '@/app/actions';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -31,12 +32,14 @@ const headerMapping: { [key: string]: keyof Donor } = {
   'Name': 'name',
   'Phone': 'phone',
   'Email': 'email',
-  'Total Donated': 'totalDonations',
-  'Last Donation Date': 'lastDonationDate',
+  // We'll get financial data from the enrichment step
+  // 'Total Donated': 'totalDonations',
+  // 'Last Donation Date': 'lastDonationDate',
 };
 
 enum ImportStep {
   SelectFile,
+  Enriching,
   NameCampaign,
 }
 
@@ -54,7 +57,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
       setIsProcessing(true);
       setFileName(file.name);
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = e.target?.result;
           const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
@@ -68,22 +71,32 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
               if (row[excelHeader] !== undefined) {
                 const donorKey = headerMapping[excelHeader];
                 let value = row[excelHeader];
-                if(donorKey === 'lastDonationDate') {
-                  value = new Date(value);
-                }
                 // @ts-ignore
                 donor[donorKey] = value;
               }
             }
             if (!donor.id) donor.id = `generated-${Math.random()}`;
+            
+            // Add a placeholder giving summary, to be filled by enrichment
+            donor.givingSummary = {
+              totalDonations: 0,
+              lastDonationDate: null,
+              lastDonationAmount: 0,
+              averageGift: 0,
+            };
+
             return donor as Donor;
           }).filter(donor => !!donor.phone); // Only include donors with a phone number.
 
-          setImportedDonors(donors);
+          setStep(ImportStep.Enriching);
+          const enriched = await enrichDonors(donors);
+          
+          setImportedDonors(enriched);
           setCampaignName(file.name.replace(/\.(xlsx|xls)$/, ''));
           setStep(ImportStep.NameCampaign);
         } catch (error) {
-          console.error("Error parsing Excel file:", error);
+          console.error("Error processing file:", error);
+          resetState(); // Reset on error
         } finally {
           setIsProcessing(false);
         }
@@ -117,16 +130,16 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
         fileInputRef.current.value = '';
     }
   }
-
-  return (
-    <AlertDialog open={true} onOpenChange={(isOpen) => !isOpen && resetState()}>
-      <AlertDialogContent>
-        {step === ImportStep.SelectFile && (
+  
+  const renderStepContent = () => {
+    switch (step) {
+      case ImportStep.SelectFile:
+        return (
           <>
             <AlertDialogHeader>
               <AlertDialogTitle className="font-headline text-2xl">Create New Call Campaign</AlertDialogTitle>
               <AlertDialogDescription>
-                Select an Excel file (.xlsx, .xls) to generate a new call list.
+                Select an Excel file (.xlsx, .xls) with donor names and phone numbers to begin.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="py-4">
@@ -145,10 +158,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
                 <Button onClick={handleButtonClick} disabled={isProcessing} size="lg">
                   {isProcessing ? (
                     <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                      <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5" />
                       Processing...
                     </>
                   ) : (
@@ -165,13 +175,32 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
               <AlertDialogCancel>Cancel</AlertDialogCancel>
             </AlertDialogFooter>
           </>
-        )}
-        {step === ImportStep.NameCampaign && (
+        );
+
+      case ImportStep.Enriching:
+        return (
           <>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="font-headline text-2xl">Enriching Data</AlertDialogTitle>
+              <AlertDialogDescription>
+                Connecting to Bloomerang to get the latest household and giving information...
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-8 flex flex-col items-center justify-center text-center">
+              <Sparkles className="w-12 h-12 text-primary animate-pulse mb-4" />
+              <p className="text-lg font-semibold">Enhancing donor profiles...</p>
+              <p className="text-muted-foreground mt-1">This may take a moment.</p>
+            </div>
+          </>
+        );
+
+      case ImportStep.NameCampaign:
+        return (
+           <>
             <AlertDialogHeader>
               <AlertDialogTitle className="font-headline text-2xl">Name Your Campaign</AlertDialogTitle>
               <AlertDialogDescription>
-                Give this campaign a descriptive name. This will help you identify it later.
+                Your data has been enriched! Give this campaign a name to save it.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="py-4 space-y-4">
@@ -185,7 +214,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
                 />
               </div>
               <p className="text-sm text-muted-foreground">
-                Successfully imported <span className="font-bold text-primary">{importedDonors?.length}</span> donors from <span className="font-bold text-primary">{fileName}</span>.
+                Successfully imported and enriched <span className="font-bold text-primary">{importedDonors?.length}</span> donors from <span className="font-bold text-primary">{fileName}</span>.
               </p>
             </div>
             <AlertDialogFooter>
@@ -195,7 +224,14 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
               </AlertDialogAction>
             </AlertDialogFooter>
           </>
-        )}
+        );
+    }
+  }
+
+  return (
+    <AlertDialog open={true} onOpenChange={(isOpen) => !isOpen && resetState()}>
+      <AlertDialogContent>
+        {renderStepContent()}
       </AlertDialogContent>
     </AlertDialog>
   );
