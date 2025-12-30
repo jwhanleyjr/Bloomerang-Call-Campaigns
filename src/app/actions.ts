@@ -1,4 +1,5 @@
 'use server';
+import 'dotenv/config';
 
 import { z } from 'zod';
 import fetch from 'node-fetch';
