@@ -66,15 +66,14 @@ function getApiKey() {
   return apiKey;
 }
 
-const BASE_URL = process.env.BLOOMERANG_API_BASE ?? 'https://api.bloomerang.co';
+const BASE_URL = process.env.BLOOMERANG_API_BASE ?? 'https://api.bloomerang.co/v2';
 
 export async function fetchConstituent(constituentId: string): Promise<ConstituentApi> {
   const key = getApiKey();
 
   const response = await fetch(`${BASE_URL}/constituent/${constituentId}`, {
     headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
+      'X-API-KEY': key,
     },
     cache: 'no-store',
   });
@@ -98,8 +97,7 @@ export async function fetchHousehold(householdId: string): Promise<HouseholdApi>
 
   const response = await fetch(`${BASE_URL}/household/${householdId}`, {
     headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
+      'X-API-KEY': key,
     },
     cache: 'no-store',
   });
