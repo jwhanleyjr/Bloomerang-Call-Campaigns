@@ -37,7 +37,7 @@ export type Donor = {
 export type Campaign = {
   id: string;
   name: string;
-  donors?: Donor[]; // This will be a subcollection
+  donors?: Donor[]; // This is not reliably populated from Firestore, it's for type convenience
   createdAt: Date | Timestamp;
 };
 

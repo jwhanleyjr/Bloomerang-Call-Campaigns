@@ -9,9 +9,8 @@ import { Progress } from "@/components/ui/progress";
 import FileImporter from './file-importer';
 import type { Campaign, Donor } from '@/lib/types';
 import { format } from 'date-fns';
-import { collection, addDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, Timestamp } from 'firebase/firestore';
 import { useUser, useFirestore } from '@/firebase';
-import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { useToast } from '@/hooks/use-toast';
 
 type CampaignDashboardProps = {
@@ -65,8 +64,7 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
         const donorWritePromises: Promise<void>[] = [];
         for (const donor of donors) {
             const donorDocRef = doc(donorsCollectionRef, donor.id);
-            // setDocumentNonBlocking doesn't return a promise we can easily track.
-            // For this critical step, we'll use setDoc directly and collect the promises.
+            // Use setDoc directly to ensure we can await its completion
             donorWritePromises.push(
               setDoc(donorDocRef, donor, { merge: true }).catch(error => {
                 console.error(`Failed to write donor ${donor.id}:`, error);
@@ -78,8 +76,14 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
         // 3. Wait for all donor documents to be written
         await Promise.all(donorWritePromises);
         
-        // 4. Now that all data is saved, navigate to the new campaign
-        onSelectCampaign({ id: campaignDocRef.id, ...newCampaignData, donors });
+        toast({
+          title: 'Campaign Created!',
+          description: `"${campaignName}" with ${donors.length} donors has been saved.`
+        });
+        
+        // 4. Now that all data is saved, navigate to the new campaign.
+        // Pass only the core campaign data. The CallListTable will fetch the donors subcollection.
+        onSelectCampaign({ id: campaignDocRef.id, ...newCampaignData });
 
     } catch (error) {
         console.error("Error creating campaign:", error);
