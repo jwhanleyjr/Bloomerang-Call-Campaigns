@@ -14,7 +14,9 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Phone, CheckCircle, XCircle, Clock, Users, User, UploadCloud, Loader2, CalendarClock, RefreshCw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Phone, CheckCircle, XCircle, Clock, Users, User, UploadCloud, Loader2, CalendarClock, RefreshCw, KeyRound } from 'lucide-react';
 import InteractionLogger from './interaction-logger';
 import type { Donor, Interaction, Campaign } from '@/lib/types';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -121,6 +123,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
   const [isLoggerOpen, setIsLoggerOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [apiKey, setApiKey] = useState('');
   const { toast } = useToast();
 
   const handleLogRowClick = (donor: Donor) => {
@@ -144,7 +147,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
     setIsRefreshing(true);
     try {
       // This function fetches the latest data from Bloomerang
-      const enriched = await enrichDonors(donors);
+      const enriched = await enrichDonors(donors, apiKey);
       
       // Write the updated data back to Firestore
       const batch = writeBatch(firestore);
@@ -166,7 +169,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
       toast({
         variant: 'destructive',
         title: 'Refresh Failed',
-        description: 'Could not update donor data from Bloomerang. Please try again.',
+        description: error instanceof Error ? error.message : 'Could not update donor data from Bloomerang. Please try again.',
       });
     } finally {
       setIsRefreshing(false);
@@ -312,10 +315,43 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <Button variant="outline" onClick={handleRefreshData} disabled={isRefreshing}>
-              {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-              Check for Updates
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" disabled={isRefreshing}>
+                  {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Check for Updates
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Check for Updates</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Enter your Bloomerang API key to refresh donor data. This will fetch the latest giving history and household information.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-4 space-y-2">
+                  <Label htmlFor="api-key-refresh">Bloomerang API Key</Label>
+                  <div className='relative'>
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="api-key-refresh"
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      className="pl-10"
+                      placeholder="api_key_..."
+                    />
+                  </div>
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleRefreshData} disabled={isRefreshing || !apiKey}>
+                    {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Refresh Data
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardFooter>
         </Card>
       </div>

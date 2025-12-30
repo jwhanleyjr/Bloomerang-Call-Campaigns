@@ -45,6 +45,9 @@ export async function logInteraction(input: z.infer<typeof logInteractionSchema>
 
 export async function enrichDonors(donors: Donor[], apiKey: string): Promise<Donor[]> {
    try {
+    if (!apiKey) {
+        throw new Error("Bloomerang API key was not provided.");
+    }
     const enrichedDonors = await enrichDonorsFlow({ donors, apiKey });
     // The flow returns dates as strings, so we need to convert them back to Date objects
     return enrichedDonors.map(donor => ({

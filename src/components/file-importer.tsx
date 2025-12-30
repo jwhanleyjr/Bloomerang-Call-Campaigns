@@ -4,7 +4,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FileUp, FileCheck2, ArrowRight, Loader2, Sparkles, AlertTriangle } from 'lucide-react';
+import { FileUp, FileCheck2, ArrowRight, Loader2, Sparkles, AlertTriangle, KeyRound } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import type { Donor } from '@/lib/types';
@@ -45,6 +45,7 @@ const headerMapping: { [key: string]: (keyof Donor)[] } = {
 
 enum ImportStep {
   SelectFile,
+  SetApiKey,
   Enriching,
   NameCampaign,
   Error,
@@ -55,8 +56,10 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [importedDonors, setImportedDonors] = useState<Donor[] | null>(null);
+  const [rawDonors, setRawDonors] = useState<Donor[] | null>(null);
   const [campaignName, setCampaignName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [apiKey, setApiKey] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -70,8 +73,10 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
     setIsProcessing(false);
     setFileName(null);
     setImportedDonors(null);
+    setRawDonors(null);
     setCampaignName('');
     setErrorMessage('');
+    // Do not reset API key
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
     }
@@ -130,12 +135,9 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
         return;
       }
       
-      setStep(ImportStep.Enriching);
-      const enriched = await enrichDonors(donors);
-      
-      setImportedDonors(enriched);
-      setCampaignName(file.name.replace(/\.(xlsx|xls|csv)$/, ''));
-      setStep(ImportStep.NameCampaign);
+      setRawDonors(donors);
+      setStep(ImportStep.SetApiKey);
+
     } catch (error) {
       console.error("Error processing file:", error);
       handleError("There was an error processing your file. Please check that it is a valid Excel file (.xlsx, .xls, .csv) and try again.");
@@ -143,6 +145,25 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
       setIsProcessing(false);
     }
   };
+
+  const handleEnrichment = async () => {
+      if (!rawDonors || !apiKey) return;
+
+      setIsProcessing(true);
+      setStep(ImportStep.Enriching);
+      
+      try {
+        const enriched = await enrichDonors(rawDonors, apiKey);
+        setImportedDonors(enriched);
+        setCampaignName(fileName?.replace(/\.(xlsx|xls|csv)$/, '') || '');
+        setStep(ImportStep.NameCampaign);
+      } catch (e) {
+          const message = e instanceof Error ? e.message : 'An unknown error occurred during enrichment.';
+          handleError(message);
+      } finally {
+          setIsProcessing(false);
+      }
+  }
 
   const handleCreateCampaign = () => {
     if (!importedDonors || !campaignName) return;
@@ -197,6 +218,42 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
               <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
             </AlertDialogFooter>
           </>
+        );
+
+      case ImportStep.SetApiKey:
+        return (
+            <>
+                <AlertDialogHeader>
+                    <AlertDialogTitle className="font-headline text-2xl">Set API Key</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Enter your Bloomerang API key to enrich your donor data with giving history and household info.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-4 space-y-2">
+                  <Label htmlFor="api-key">Bloomerang API Key</Label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="api-key"
+                        type="password"
+                        value={apiKey}
+                        onChange={(e) => setApiKey(e.target.value)}
+                        placeholder="api_key_..."
+                        className="pl-10"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Found {rawDonors?.length} donors in <span className="font-bold">{fileName}</span>.
+                  </p>
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleEnrichment} disabled={!apiKey || isProcessing}>
+                        {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2" />}
+                        Enrich Data
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </>
         );
 
       case ImportStep.Enriching:
