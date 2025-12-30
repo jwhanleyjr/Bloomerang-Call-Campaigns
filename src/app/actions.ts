@@ -71,67 +71,57 @@ const bloomerangApiFetch = async (endpoint: string) => {
 
 export async function enrichDonors(donors: Donor[]): Promise<Donor[]> {
     const enrichedDonors = await Promise.all(donors.map(async (donor) => {
-        try {
-            // 1. Fetch Constituent
-            const constituent = await bloomerangApiFetch(`constituent/${donor.id}`) as any;
+        // 1. Fetch Constituent
+        const constituent = await bloomerangApiFetch(`constituent/${donor.id}`) as any;
 
-            // 2. Fetch Transactions
-            const transactionsData = await bloomerangApiFetch(`transactions?accountId=${donor.id}`) as any;
-            const transactions = transactionsData.Results || [];
+        // 2. Fetch Transactions
+        const transactionsData = await bloomerangApiFetch(`transactions?accountId=${donor.id}`) as any;
+        const transactions = transactionsData.Results || [];
 
-            let givingSummary: GivingSummary = {
-                totalDonations: 0,
-                lastDonationDate: null,
-                lastDonationAmount: 0,
-                averageGift: 0,
-            };
+        let givingSummary: GivingSummary = {
+            totalDonations: 0,
+            lastDonationDate: null,
+            lastDonationAmount: 0,
+            averageGift: 0,
+        };
 
-            if (transactions.length > 0) {
-                const total = transactions.reduce((acc: number, t: any) => acc + t.Amount, 0);
-                const sortedTransactions = [...transactions].sort((a: any, b: any) => new Date(b.Date).getTime() - new Date(a.Date).getTime());
-                const lastTransaction = sortedTransactions[0];
-                
-                givingSummary = {
-                    totalDonations: total,
-                    lastDonationDate: new Date(lastTransaction.Date),
-                    lastDonationAmount: lastTransaction.Amount,
-                    averageGift: total / transactions.length,
-                };
-            }
-
-            // 3. Fetch Notes and generate AI Summary
-            const notesData = await bloomerangApiFetch(`notes?accountId=${donor.id}`) as any;
-            const pastNotes = (notesData.Results || []).map((n: any) => n.Note).join('\n');
+        if (transactions.length > 0) {
+            const total = transactions.reduce((acc: number, t: any) => acc + t.Amount, 0);
+            const sortedTransactions = [...transactions].sort((a: any, b: any) => new Date(b.Date).getTime() - new Date(a.Date).getTime());
+            const lastTransaction = sortedTransactions[0];
             
-            let aiSummary = 'No past notes to summarize.';
-            if (pastNotes) {
-                try {
-                    const summaryResult = await summarizeNotes({ notes: pastNotes });
-                    aiSummary = summaryResult.summary;
-                } catch (e) {
-                    console.error("AI summarization failed for donor " + donor.id, e);
-                    aiSummary = 'Could not generate AI summary.';
-                }
-            }
-
-            // 4. Return enriched donor
-            return {
-                ...donor,
-                address: constituent.PrimaryAddress?.Street || donor.address || 'N/A',
-                householdId: constituent.HouseholdId,
-                householdName: constituent.HouseholdName || 'Household', // Will get from household record later if needed
-                givingSummary,
-                aiSummary,
-            };
-        } catch (error) {
-            console.error(`Failed to enrich donor ${donor.id}:`, error);
-            // Return the original donor object if enrichment fails
-            return {
-                ...donor,
-                aiSummary: 'Failed to fetch donor details from Bloomerang.',
-                givingSummary: donor.givingSummary, // Keep placeholder
+            givingSummary = {
+                totalDonations: total,
+                lastDonationDate: new Date(lastTransaction.Date),
+                lastDonationAmount: lastTransaction.Amount,
+                averageGift: total / transactions.length,
             };
         }
+
+        // 3. Fetch Notes and generate AI Summary
+        const notesData = await bloomerangApiFetch(`notes?accountId=${donor.id}`) as any;
+        const pastNotes = (notesData.Results || []).map((n: any) => n.Note).join('\n');
+        
+        let aiSummary = 'No past notes to summarize.';
+        if (pastNotes) {
+            try {
+                const summaryResult = await summarizeNotes({ notes: pastNotes });
+                aiSummary = summaryResult.summary;
+            } catch (e) {
+                console.error("AI summarization failed for donor " + donor.id, e);
+                aiSummary = 'Could not generate AI summary.';
+            }
+        }
+
+        // 4. Return enriched donor
+        return {
+            ...donor,
+            address: constituent.PrimaryAddress?.Street || donor.address || 'N/A',
+            householdId: constituent.HouseholdId,
+            householdName: constituent.HouseholdName || 'Household', // Will get from household record later if needed
+            givingSummary,
+            aiSummary,
+        };
     }));
 
     return enrichedDonors;
