@@ -58,18 +58,18 @@ function formatAddress(address?: ConstituentApi['PrimaryAddress']): string | und
   return parts.length ? parts.join(', ') : undefined;
 }
 
-function getApiKey(providedKey?: string) {
-  const apiKey = providedKey || process.env.BLOOMERANG_API_KEY;
+function getApiKey() {
+  const apiKey = process.env.BLOOMERANG_API_KEY;
   if (!apiKey) {
-    throw new Error('Bloomerang API key is missing. Provide it via the UI or BLOOMERANG_API_KEY env var.');
+    throw new Error('Bloomerang API key is missing. Set BLOOMERANG_API_KEY in your environment.');
   }
   return apiKey;
 }
 
 const BASE_URL = process.env.BLOOMERANG_API_BASE ?? 'https://api.bloomerang.co';
 
-export async function fetchConstituent(constituentId: string, apiKey?: string): Promise<ConstituentApi> {
-  const key = getApiKey(apiKey);
+export async function fetchConstituent(constituentId: string): Promise<ConstituentApi> {
+  const key = getApiKey();
 
   const response = await fetch(`${BASE_URL}/v2/constituent/${constituentId}`, {
     headers: {
@@ -93,8 +93,8 @@ export async function fetchConstituent(constituentId: string, apiKey?: string): 
   return parsed.data;
 }
 
-export async function fetchHousehold(householdId: string, apiKey?: string): Promise<HouseholdApi> {
-  const key = getApiKey(apiKey);
+export async function fetchHousehold(householdId: string): Promise<HouseholdApi> {
+  const key = getApiKey();
 
   const response = await fetch(`${BASE_URL}/v2/household/${householdId}`, {
     headers: {

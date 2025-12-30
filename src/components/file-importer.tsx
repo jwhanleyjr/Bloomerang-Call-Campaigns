@@ -56,7 +56,6 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
   const [fileName, setFileName] = useState<string | null>(null);
   const [importedDonors, setImportedDonors] = useState<Donor[] | null>(null);
   const [campaignName, setCampaignName] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -73,7 +72,6 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
     setFileName(null);
     setImportedDonors(null);
     setCampaignName('');
-    setApiKey('');
     setErrorMessage('');
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -153,13 +151,13 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
       let donorsToSave = importedDonors;
 
       try {
-        donorsToSave = await enrichDonors(importedDonors, apiKey || undefined);
+        donorsToSave = await enrichDonors(importedDonors);
       } catch (error) {
         console.error("Error enriching donors:", error);
         toast({
           variant: 'destructive',
           title: 'Enhancement Failed',
-          description: 'Campaign created with uploaded data only. Please verify your API key and try refreshing later.',
+          description: 'Campaign created with uploaded data only. Please check server logs or your BLOOMERANG_API_KEY and try again.',
         });
       }
 
@@ -240,20 +238,6 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
                   onChange={(e) => setCampaignName(e.target.value)}
                   placeholder="e.g., Spring Fundraiser 2024"
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="api-key">Bloomerang API Key (optional)</Label>
-                <Input
-                  id="api-key"
-                  value={apiKey}
-                  type="password"
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Paste your Bloomerang API key to auto-enhance donors"
-                  disabled={isProcessing}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Used once to enrich donors and household members. If left blank, the server environment variable will be used.
-                </p>
               </div>
               <p className="text-sm text-muted-foreground">
                 Successfully found <span className="font-bold text-primary">{importedDonors?.length}</span> donors in <span className="font-bold text-primary">{fileName}</span>.

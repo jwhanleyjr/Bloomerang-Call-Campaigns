@@ -123,7 +123,6 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
   const [isLoggerOpen, setIsLoggerOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [apiKey, setApiKey] = useState('');
   const { toast } = useToast();
 
   const handleLogRowClick = (donor: Donor) => {
@@ -147,7 +146,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
     setIsRefreshing(true);
     try {
       // This function fetches the latest data from Bloomerang
-      const enriched = await enrichDonors(donors, apiKey);
+      const enriched = await enrichDonors(donors);
       
       // Write the updated data back to Firestore
       const batch = writeBatch(firestore);

@@ -14,7 +14,6 @@ import type { Donor, GivingSummary } from '@/lib/types';
 
 const EnrichDonorsInputSchema = z.object({
   donors: z.array(DonorSchema),
-  apiKey: z.string().describe('The Bloomerang API key.').optional(),
 });
 
 const EnrichDonorsOutputSchema = z.array(DonorSchema);
@@ -40,19 +39,16 @@ export async function enrichDonors(input: z.infer<typeof EnrichDonorsInputSchema
   return enrichDonorsFlow(input);
 }
 
-async function buildEnrichedDonor(
-  donor: Donor,
-  apiKey?: string
-): Promise<{ donor: Donor; additionalMembers: Donor[] }> {
+async function buildEnrichedDonor(donor: Donor): Promise<{ donor: Donor; additionalMembers: Donor[] }> {
   try {
-    const constituent = await fetchConstituent(donor.id, apiKey);
+    const constituent = await fetchConstituent(donor.id);
     const normalizedConstituent = normalizeConstituent(constituent);
 
     let householdName = donor.householdName;
     let householdMemberIds: string[] = [];
 
     if (normalizedConstituent.householdId) {
-      const household = await fetchHousehold(normalizedConstituent.householdId, apiKey);
+      const household = await fetchHousehold(normalizedConstituent.householdId);
       const normalizedHousehold = normalizeHousehold(household);
       householdName = normalizedHousehold.name || householdName;
       householdMemberIds = normalizedHousehold.memberIds;
@@ -74,7 +70,7 @@ async function buildEnrichedDonor(
     for (const memberId of householdMemberIds) {
       if (memberId === enrichedDonor.id) continue;
 
-      const member = await fetchConstituent(memberId, apiKey);
+      const member = await fetchConstituent(memberId);
       const normalizedMember = normalizeConstituent(member);
 
       additionalMembers.push({
@@ -104,11 +100,11 @@ export const enrichDonorsFlow = ai.defineFlow(
     inputSchema: EnrichDonorsInputSchema,
     outputSchema: EnrichDonorsOutputSchema,
   },
-  async ({ donors, apiKey }) => {
+  async ({ donors }) => {
     const donorMap = new Map<string, Donor>();
 
     for (const donor of donors) {
-      const { donor: enrichedDonor, additionalMembers } = await buildEnrichedDonor(donor, apiKey);
+      const { donor: enrichedDonor, additionalMembers } = await buildEnrichedDonor(donor);
 
       donorMap.set(enrichedDonor.id, enrichedDonor);
       additionalMembers.forEach((member) => {
