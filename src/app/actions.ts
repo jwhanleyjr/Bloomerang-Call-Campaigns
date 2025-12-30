@@ -6,6 +6,8 @@ import { suggestInteractionCompletion, SuggestInteractionCompletionInput } from 
 import type { Interaction, Donor, GivingSummary } from '@/lib/types';
 import { enrichDonors as enrichDonorsFlow } from '@/ai/flows/enrich-donors';
 
+export type EnrichDonorsResult = { donors: Donor[]; error?: string };
+
 export async function getAiSuggestion(input: SuggestInteractionCompletionInput) {
   const suggestion = await suggestInteractionCompletion(input);
   return suggestion;
@@ -43,31 +45,35 @@ export async function logInteraction(input: z.infer<typeof logInteractionSchema>
   return newInteraction;
 }
 
-export async function enrichDonors(donors: Donor[], apiKey?: string): Promise<Donor[]> {
-   try {
-    const enrichedDonors = await enrichDonorsFlow({ donors, apiKey });
+export async function enrichDonors(donors: Donor[]): Promise<EnrichDonorsResult> {
+  try {
+    const enrichedDonors = await enrichDonorsFlow({ donors });
     // The flow returns dates as strings, so we need to convert them back to Date objects
-    return enrichedDonors.map(donor => ({
-      ...donor,
-      givingSummary: {
-        ...donor.givingSummary,
-        lastDonationDate: donor.givingSummary?.lastDonationDate 
-          ? new Date(donor.givingSummary.lastDonationDate) 
-          : null,
-      },
-      lastInteraction: donor.lastInteraction ? {
-        ...donor.lastInteraction,
-        loggedAt: new Date(donor.lastInteraction.loggedAt),
-        followUpDate: donor.lastInteraction.followUpDate ? new Date(donor.lastInteraction.followUpDate) : undefined,
-      } : null
-    }));
+    return {
+      donors: enrichedDonors.map(donor => ({
+        ...donor,
+        givingSummary: {
+          ...donor.givingSummary,
+          lastDonationDate: donor.givingSummary?.lastDonationDate
+            ? new Date(donor.givingSummary.lastDonationDate)
+            : null,
+        },
+        lastInteraction: donor.lastInteraction ? {
+          ...donor.lastInteraction,
+          loggedAt: new Date(donor.lastInteraction.loggedAt),
+          followUpDate: donor.lastInteraction.followUpDate ? new Date(donor.lastInteraction.followUpDate) : undefined,
+        } : null
+      })),
+    };
   } catch (error) {
     console.error("Error during donor enrichment flow:", error);
-    // Re-throw the error so the client can handle it
-    if (error instanceof Error) {
-        throw new Error(`Donor enrichment failed: ${error.message}`);
-    }
-    throw new Error('An unknown error occurred during donor enrichment.');
+    const message = error instanceof Error ? error.message : 'An unknown error occurred during donor enrichment.';
+
+    // Return the uploaded donors so the UI can continue without failing the render.
+    return {
+      donors,
+      error: `Donor enhancement skipped: ${message}`,
+    };
   }
 }
 

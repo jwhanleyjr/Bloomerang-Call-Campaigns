@@ -4,11 +4,12 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FileUp, FileCheck2, ArrowRight, Loader2, Sparkles, AlertTriangle, KeyRound } from 'lucide-react';
+import { FileUp, FileCheck2, ArrowRight, Loader2, AlertTriangle } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import type { Donor } from '@/lib/types';
 import { enrichDonors } from '@/app/actions';
+import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -57,6 +58,7 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
   const [campaignName, setCampaignName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen) {
@@ -146,8 +148,21 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
 
     setIsProcessing(true);
     try {
-      // We no longer enrich here, just pass the donors directly.
-      onCampaignCreated(campaignName, importedDonors);
+      let donorsToSave = importedDonors;
+
+      const { donors: enrichedDonors, error: enrichmentError } = await enrichDonors(importedDonors);
+      donorsToSave = enrichedDonors;
+
+      if (enrichmentError) {
+        console.error("Error enriching donors:", enrichmentError);
+        toast({
+          variant: 'destructive',
+          title: 'Enhancement Failed',
+          description: `${enrichmentError} Campaign created with uploaded data only.`,
+        });
+      }
+
+      onCampaignCreated(campaignName, donorsToSave);
     } catch(e) {
        const message = e instanceof Error ? e.message : 'An unknown error occurred creating the campaign.';
        handleError(message);
@@ -218,7 +233,7 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
             <div className="py-4 space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="campaign-name">Campaign Name</Label>
-                <Input 
+                <Input
                   id="campaign-name"
                   value={campaignName}
                   onChange={(e) => setCampaignName(e.target.value)}
