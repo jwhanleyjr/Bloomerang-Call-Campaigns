@@ -26,9 +26,9 @@ function calculateProgress(donors: Donor[] | undefined): number {
 export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCampaign, isLoading }: CampaignDashboardProps) {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
 
-  const handleCampaignCreated = (newCampaign: Omit<Campaign, 'id'>) => {
+  const handleCampaignCreated = (newCampaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => {
     onNewCampaign(newCampaign);
-    setIsImporterOpen(false); // Close the importer dialog
+    setIsImporterOpen(false);
   };
 
   return (
@@ -96,7 +96,11 @@ export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCa
         </div>
       )}
 
-      {isImporterOpen && <FileImporter onCampaignCreated={handleCampaignCreated} onCancel={() => setIsImporterOpen(false)} />}
+      <FileImporter
+        isOpen={isImporterOpen}
+        onClose={() => setIsImporterOpen(false)}
+        onCampaignCreated={handleCampaignCreated}
+      />
     </div>
   );
 }

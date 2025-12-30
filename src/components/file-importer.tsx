@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FileUp, FileCheck2, ArrowRight, Loader2, Sparkles } from 'lucide-react';
-import { useState, useRef, useTransition } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import type { Donor, Campaign } from '@/lib/types';
 import { enrichDonors } from '@/app/actions';
@@ -21,18 +21,17 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog"
 
-
 type FileImporterProps = {
-  onCampaignCreated: (campaign: Omit<Campaign, 'id'>) => void;
-  onCancel: () => void;
+  isOpen: boolean;
+  onClose: () => void;
+  onCampaignCreated: (campaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => void;
 };
 
-// Flexible header mapping to find common variations
 const headerMapping: { [key in keyof Donor]?: string[] } = {
-  id: ['ID', 'Constituent ID', 'Account ID'],
-  name: ['Name', 'Full Name'],
-  phone: ['Phone', 'Phone Number', 'Primary Phone'],
-  email: ['Email', 'Email Address'],
+  id: ['id', 'constituent id', 'account id'],
+  name: ['name', 'full name'],
+  phone: ['phone', 'phone number', 'primary phone'],
+  email: ['email', 'email address'],
 };
 
 enum ImportStep {
@@ -41,79 +40,103 @@ enum ImportStep {
   NameCampaign,
 }
 
-export default function FileImporter({ onCampaignCreated, onCancel }: FileImporterProps) {
+export default function FileImporter({ isOpen, onClose, onCampaignCreated }: FileImporterProps) {
+  const [step, setStep] = useState<ImportStep>(ImportStep.SelectFile);
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [importedDonors, setImportedDonors] = useState<Donor[] | null>(null);
   const [campaignName, setCampaignName] = useState('');
-  const [step, setStep] = useState<ImportStep>(ImportStep.SelectFile);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    if (isOpen) {
+      resetState();
+    }
+  }, [isOpen]);
+
+  const resetState = () => {
+    setStep(ImportStep.SelectFile);
+    setIsProcessing(false);
+    setFileName(null);
+    setImportedDonors(null);
+    setCampaignName('');
+    if(fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      setIsProcessing(true);
-      setFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const data = e.target?.result;
-          const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet) as any[];
+    if (!file) return;
 
-          const donors: Donor[] = json
-            .map((row) => {
-              const donor: Partial<Donor> = { status: 'pending', lastInteraction: null };
-              
-              for (const key in headerMapping) {
-                const donorKey = key as keyof Donor;
-                const possibleHeaders = headerMapping[donorKey]!;
-                
-                for (const header of possibleHeaders) {
-                  if (row[header] !== undefined) {
+    setIsProcessing(true);
+    setFileName(file.name);
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(worksheet) as any[];
+
+      const lowerCaseHeaderMapping: { [key: string]: keyof Donor } = {};
+      for (const key in headerMapping) {
+          const donorKey = key as keyof Donor;
+          headerMapping[donorKey]!.forEach(header => {
+              lowerCaseHeaderMapping[header.toLowerCase()] = donorKey;
+          });
+      }
+
+      const donors: Donor[] = json
+        .map((row) => {
+          const donor: Partial<Donor> = { status: 'pending', lastInteraction: null };
+          const rowKeys = Object.keys(row).map(k => k.toLowerCase());
+
+          for (const rowKey of rowKeys) {
+              if (lowerCaseHeaderMapping[rowKey]) {
+                  const donorKey = lowerCaseHeaderMapping[rowKey];
+                  // Find original case key to get value
+                  const originalKey = Object.keys(row).find(k => k.toLowerCase() === rowKey);
+                  if(originalKey) {
                     // @ts-ignore
-                    donor[donorKey] = String(row[header]);
-                    break;
+                    donor[donorKey] = String(row[originalKey]);
                   }
-                }
               }
-
-              if (!donor.id) donor.id = `generated-${Math.random()}`;
-              
-              donor.givingSummary = {
-                totalDonations: 0,
-                lastDonationDate: null,
-                lastDonationAmount: 0,
-                averageGift: 0,
-              };
-
-              return donor as Donor;
-            })
-            .filter(donor => !!donor.id && !!donor.phone);
-
-          if (donors.length === 0) {
-            alert("No donors with a valid ID and Phone Number could be found in the uploaded file. Please check the column headers.");
-            resetState();
-            return;
           }
           
-          setStep(ImportStep.Enriching);
-          const enriched = await enrichDonors(donors);
+          if (!donor.id) donor.id = `generated-${Math.random()}`;
           
-          setImportedDonors(enriched);
-          setCampaignName(file.name.replace(/\.(xlsx|xls|csv)$/, ''));
-          setStep(ImportStep.NameCampaign);
-        } catch (error) {
-          console.error("Error processing file:", error);
-          alert("There was an error processing your file. Please check the console for details.");
-          resetState();
-        } finally {
-          setIsProcessing(false);
-        }
-      };
-      reader.readAsBinaryString(file);
+          donor.givingSummary = {
+            totalDonations: 0,
+            lastDonationDate: null,
+            lastDonationAmount: 0,
+            averageGift: 0,
+          };
+
+          return donor as Donor;
+        })
+        .filter(donor => !!donor.id && (!!donor.phone || !!donor.email));
+
+      if (donors.length === 0) {
+        alert("No donors with a valid ID and Phone/Email could be found in the uploaded file. Please check the column headers. We're looking for headers like 'ID', 'Name', 'Phone', and 'Email'.");
+        resetState();
+        onClose();
+        return;
+      }
+      
+      setStep(ImportStep.Enriching);
+      const enriched = await enrichDonors(donors);
+      
+      setImportedDonors(enriched);
+      setCampaignName(file.name.replace(/\.(xlsx|xls|csv)$/, ''));
+      setStep(ImportStep.NameCampaign);
+    } catch (error) {
+      console.error("Error processing file:", error);
+      alert("There was an error processing your file. Please check that it is a valid Excel file (.xlsx, .xls, .csv) and try again.");
+      resetState();
+      onClose();
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -131,18 +154,6 @@ export default function FileImporter({ onCampaignCreated, onCancel }: FileImport
     fileInputRef.current?.click();
   };
   
-  const resetState = () => {
-    setIsProcessing(false);
-    setFileName(null);
-    setImportedDonors(null);
-    setCampaignName('');
-    setStep(ImportStep.SelectFile);
-    if(fileInputRef.current) {
-        fileInputRef.current.value = '';
-    }
-    onCancel();
-  }
-  
   const renderStepContent = () => {
     switch (step) {
       case ImportStep.SelectFile:
@@ -151,7 +162,7 @@ export default function FileImporter({ onCampaignCreated, onCancel }: FileImport
             <AlertDialogHeader>
               <AlertDialogTitle className="font-headline text-2xl">Create New Call Campaign</AlertDialogTitle>
               <AlertDialogDescription>
-                Select an Excel file (.xlsx, .xls) with donor names and phone numbers to begin.
+                Select an Excel file (.xlsx, .xls, .csv) with donor names and phone numbers to begin.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="py-4">
@@ -184,7 +195,7 @@ export default function FileImporter({ onCampaignCreated, onCancel }: FileImport
               </div>
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={resetState}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
             </AlertDialogFooter>
           </>
         );
@@ -230,7 +241,7 @@ export default function FileImporter({ onCampaignCreated, onCancel }: FileImport
               </p>
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={resetState}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
               <AlertDialogAction onClick={handleCreateCampaign} disabled={!campaignName}>
                 Create Campaign <ArrowRight className="ml-2"/>
               </AlertDialogAction>
@@ -241,8 +252,8 @@ export default function FileImporter({ onCampaignCreated, onCancel }: FileImport
   }
 
   return (
-    <AlertDialog open={true} onOpenChange={(isOpen) => !isOpen && resetState()}>
-      <AlertDialogContent>
+    <AlertDialog open={isOpen} onOpenChange={onClose}>
+      <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
         {renderStepContent()}
       </AlertDialogContent>
     </AlertDialog>
