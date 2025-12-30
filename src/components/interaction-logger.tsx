@@ -120,16 +120,25 @@ export default function InteractionLogger({ isOpen, onClose, donor, onInteractio
   const onSubmit = async (data: InteractionFormData) => {
     setIsSaving(true);
     try {
-      const newInteraction = await logInteraction({
-        donorId: donor.id,
-        ...data,
-      });
+      // This function no longer calls the server action directly
+      // It prepares the interaction object and passes it to the parent
+      const newInteraction: Interaction = {
+          id: `int-${Date.now()}`,
+          outcome: data.outcome,
+          notes: data.notes,
+          nextStep: data.nextStep,
+          followUpDate: data.followUpDate,
+          loggedAt: new Date(),
+          loggedBy: 'Current User', // In a real app, this would come from auth session.
+      };
 
       onInteractionLogged(donor, newInteraction);
+      
       toast({
         title: 'Interaction Logged',
-        description: `Successfully logged call for ${donor.name}.`,
+        description: `Interaction for ${donor.name} has been saved.`,
       });
+      onClose(); // Close the sheet
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -151,7 +160,7 @@ export default function InteractionLogger({ isOpen, onClose, donor, onInteractio
           </SheetDescription>
         </SheetHeader>
         
-        <div className="px-6">
+        <div className="px-6 space-y-4">
           <Card>
             <CardContent className="p-3">
               <p className="text-sm font-medium mb-3 text-secondary-foreground">Giving Summary</p>
@@ -159,21 +168,31 @@ export default function InteractionLogger({ isOpen, onClose, donor, onInteractio
                 <StatCard 
                   icon={<Gift className="w-5 h-5" />}
                   label="Last Gift"
-                  value={`$${(donor.givingSummary.lastDonationAmount || 0).toLocaleString()}`}
+                  value={`$${(donor.givingSummary?.lastDonationAmount || 0).toLocaleString()}`}
                 />
                  <StatCard 
                   icon={<TrendingUp className="w-5 h-5" />}
                   label="Avg. Gift"
-                  value={`$${(donor.givingSummary.averageGift || 0).toLocaleString()}`}
+                  value={`$${(donor.givingSummary?.averageGift || 0).toLocaleString()}`}
                 />
                  <StatCard 
                   icon={<DollarSign className="w-5 h-5" />}
                   label="Total Giving"
-                  value={`$${(donor.givingSummary.totalDonations || 0).toLocaleString()}`}
+                  value={`$${(donor.givingSummary?.totalDonations || 0).toLocaleString()}`}
                 />
               </div>
             </CardContent>
           </Card>
+          {donor.aiSummary && (
+            <Card className="bg-accent/10 border-accent">
+              <CardHeader className='p-3'>
+                <CardTitle className="text-base flex items-center gap-2"><Wand2 className="w-5 h-5 text-accent"/> AI Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <p className="text-sm text-accent-foreground/80">{donor.aiSummary}</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
 

@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, ArrowRight, FolderKanban } from 'lucide-react';
+import { PlusCircle, ArrowRight, FolderKanban, Loader2 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import FileImporter from './file-importer';
 import type { Campaign, Donor } from '@/lib/types';
@@ -12,20 +12,21 @@ import { format } from 'date-fns';
 
 type CampaignDashboardProps = {
   campaigns: Campaign[];
-  onNewCampaign: (campaign: Campaign) => void;
+  onNewCampaign: (campaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => void;
   onSelectCampaign: (campaign: Campaign) => void;
+  isLoading: boolean;
 };
 
-function calculateProgress(donors: Donor[]): number {
-  if (donors.length === 0) return 0;
+function calculateProgress(donors: Donor[] | undefined): number {
+  if (!donors || donors.length === 0) return 0;
   const completedCount = donors.filter(d => d.status === 'completed').length;
   return (completedCount / donors.length) * 100;
 }
 
-export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCampaign }: CampaignDashboardProps) {
+export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCampaign, isLoading }: CampaignDashboardProps) {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
 
-  const handleCampaignCreated = (newCampaign: Campaign) => {
+  const handleCampaignCreated = (newCampaign: Omit<Campaign, 'id'>) => {
     onNewCampaign(newCampaign);
     setIsImporterOpen(false); // Close the importer dialog
   };
@@ -40,16 +41,25 @@ export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCa
         </Button>
       </div>
 
-      {campaigns.length > 0 ? (
+      {isLoading ? (
+        <div className="text-center py-12 md:py-20 px-6 border-2 border-dashed rounded-lg flex flex-col items-center justify-center">
+            <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+            <h3 className="text-xl font-semibold mb-2 font-headline">Loading Campaigns...</h3>
+            <p className="text-muted-foreground">Please wait while we fetch your data.</p>
+        </div>
+      ) : campaigns.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {campaigns.map(campaign => {
             const progress = calculateProgress(campaign.donors);
+            const completedCount = campaign.donors?.filter(d => d.status === 'completed').length || 0;
+            const totalDonors = campaign.donors?.length || 0;
+
             return (
               <Card key={campaign.id} className="flex flex-col">
                 <CardHeader>
                   <CardTitle className="font-headline">{campaign.name}</CardTitle>
                   <CardDescription>
-                    Created on {format(campaign.createdAt, 'PPP')}
+                    Created on {format(new Date(campaign.createdAt), 'PPP')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow">
@@ -60,7 +70,7 @@ export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCa
                      </div>
                     <Progress value={progress} />
                     <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>{campaign.donors.filter(d => d.status === 'completed').length} of {campaign.donors.length} called</span>
+                        <span>{completedCount} of {totalDonors} called</span>
                     </div>
                   </div>
                 </CardContent>

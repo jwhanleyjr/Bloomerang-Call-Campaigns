@@ -2,6 +2,8 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
+import { collection } from 'firebase/firestore';
+import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 import {
   Table,
   TableBody,
@@ -15,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Phone, CheckCircle, XCircle, Clock, Users, User, UploadCloud, Loader2, CalendarClock } from 'lucide-react';
 import InteractionLogger from './interaction-logger';
 import type { Donor, Interaction, Campaign } from '@/lib/types';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +37,7 @@ import {
 type CallListTableProps = {
   campaign: Campaign;
   onUpdateDonor: (donor: Donor) => void;
+  onInteractionLogged: (donor: Donor, interaction: Interaction) => void;
 };
 
 const statusConfig = {
@@ -97,7 +100,17 @@ function groupDonors(donors: Donor[]): (Donor | { isHousehold: true; householdNa
   return [...groupedList, ...individuals.sort((a,b) => a.name.localeCompare(b.name))];
 }
 
-export default function CallListTable({ campaign, onUpdateDonor }: CallListTableProps) {
+export default function CallListTable({ campaign, onUpdateDonor, onInteractionLogged }: CallListTableProps) {
+  const { user } = useUser();
+  const firestore = useFirestore();
+
+  const donorsCollectionRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return collection(firestore, 'users', user.uid, 'campaigns', campaign.id, 'donors');
+  }, [firestore, user, campaign.id]);
+  
+  const { data: donors, isLoading: isLoadingDonors } = useCollection<Donor>(donorsCollectionRef);
+
   const [selectedDonor, setSelectedDonor] = useState<Donor | null>(null);
   const [isLoggerOpen, setIsLoggerOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -114,20 +127,15 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
     setTimeout(() => setSelectedDonor(null), 300);
   };
 
-  const handleInteractionLogged = (donor: Donor, interaction: Interaction) => {
-    const newStatus = interaction.followUpDate ? 'follow-up' : 'completed';
-    const updatedDonor = {
-      ...donor,
-      status: newStatus,
-      lastInteraction: interaction,
-    } as Donor;
-    onUpdateDonor(updatedDonor);
+  const handleLocalInteractionLogged = (donor: Donor, interaction: Interaction) => {
+    onInteractionLogged(donor, interaction);
     handleLoggerClose();
   };
 
   const handleSync = async () => {
+    if (!donors) return;
     setIsSyncing(true);
-    const interactionsToSync = campaign.donors
+    const interactionsToSync = donors
       .map(d => d.lastInteraction)
       .filter((i): i is Interaction => !!i);
 
@@ -159,8 +167,8 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
     }
   };
   
-  const progress = calculateProgress(campaign.donors);
-  const groupedDonors = useMemo(() => groupDonors(campaign.donors), [campaign.donors]);
+  const progress = calculateProgress(donors || []);
+  const groupedDonors = useMemo(() => groupDonors(donors || []), [donors]);
 
   const renderDonorRow = (donor: Donor, isHouseholdMember: boolean = false) => {
     const status = statusConfig[donor.status];
@@ -189,7 +197,7 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
                 {donor.lastInteraction.outcome?.replace('-', ' ') || 'Note'}
               </span>
               <span className="text-xs text-muted-foreground">
-                {formatDistanceToNow(donor.lastInteraction.loggedAt, { addSuffix: true })}
+                {formatDistanceToNow(new Date(donor.lastInteraction.loggedAt), { addSuffix: true })}
               </span>
             </div>
           ) : (
@@ -218,7 +226,7 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
               <div>
                 <CardTitle className="text-2xl font-headline mb-1">{campaign.name}</CardTitle>
                 <CardDescription>
-                  {campaign.donors.length} donors to call. Log your interactions below.
+                  {(donors || []).length} donors to call. Log your interactions below.
                 </CardDescription>
               </div>
               <div className="w-full md:w-1/4">
@@ -272,7 +280,14 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
             </TableRow>
           </TableHeader>
           <TableBody>
-            {groupedDonors.map((item, index) => {
+            {isLoadingDonors && (
+                <TableRow>
+                    <TableCell colSpan={6} className="h-24 text-center">
+                        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                    </TableCell>
+                </TableRow>
+            )}
+            {!isLoadingDonors && groupedDonors.map((item, index) => {
               if ('isHousehold' in item) {
                 return (
                   <React.Fragment key={`hh-${index}`}>
@@ -299,7 +314,7 @@ export default function CallListTable({ campaign, onUpdateDonor }: CallListTable
           isOpen={isLoggerOpen}
           onClose={handleLoggerClose}
           donor={selectedDonor}
-          onInteractionLogged={handleInteractionLogged}
+          onInteractionLogged={handleLocalInteractionLogged}
         />
       )}
     </>

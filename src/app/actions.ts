@@ -2,10 +2,10 @@
 
 import { z } from 'zod';
 import { suggestInteractionCompletion, SuggestInteractionCompletionInput } from '@/ai/flows/suggest-interaction-completion';
+import { summarizeNotes } from '@/ai/flows/summarize-notes';
 import type { Interaction, Donor, GivingSummary } from '@/lib/types';
 
 export async function getAiSuggestion(input: SuggestInteractionCompletionInput) {
-  // In a real app, you might add more context or safety checks here.
   const suggestion = await suggestInteractionCompletion(input);
   return suggestion;
 }
@@ -21,16 +21,14 @@ const logInteractionSchema = z.object({
 export async function logInteraction(input: z.infer<typeof logInteractionSchema>): Promise<Interaction> {
   const validatedInput = logInteractionSchema.parse(input);
 
-  // Simulate API call to Bloomerang with a delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  // In a real app, this would write to Firestore. We simulate that by returning the object.
+  // The client-side code will now handle the Firestore write.
+  await new Promise(resolve => setTimeout(resolve, 500));
 
-  // Simulate a potential API failure for queue/retry demonstration
-  if (Math.random() > 0.95) { // 5% chance of failure
-    throw new Error('Bloomerang API is currently unavailable.');
+  if (Math.random() > 0.98) { // 2% chance of failure
+    throw new Error('Failed to save interaction.');
   }
 
-  // Create an Interaction object for the audit trail/UI update.
-  // In a real app, you would also get back an ID from Bloomerang.
   const newInteraction: Interaction = {
     id: `int-${Date.now()}`,
     outcome: validatedInput.outcome,
@@ -38,38 +36,41 @@ export async function logInteraction(input: z.infer<typeof logInteractionSchema>
     nextStep: validatedInput.nextStep,
     followUpDate: validatedInput.followUpDate,
     loggedAt: new Date(),
-    loggedBy: 'Current User', // In a real app, this would come from auth session.
+    loggedBy: 'Current User', 
   };
-
-  // Here you would save the interaction to your database (audit trail)
-  // and handle queuing/retries if the Bloomerang API call failed.
 
   return newInteraction;
 }
 
-
-// This is a new function to simulate enriching donor data from an external API
 export async function enrichDonors(donors: Donor[]): Promise<Donor[]> {
-  // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 1500));
 
-  // In a real app, you would loop through donors and call the Bloomerang API
-  // for each one to get their full details.
-  // For this prototype, we'll just add some mock enriched data.
-  
-  const enrichedDonors = donors.map(donor => {
-    // Simulate finding household members
-    const isHousehold = Math.random() > 0.7; // 30% chance of being in a household
-    const householdId = isHousehold ? `hh-${donor.id.substring(0,2)}` : undefined;
+  const enrichedDonors = await Promise.all(donors.map(async (donor) => {
+    const isHousehold = Math.random() > 0.7;
+    const householdId = isHousehold ? `hh-${donor.id.substring(0, 2)}` : undefined;
     const householdName = isHousehold ? `${donor.name.split(' ')[1]} Household` : undefined;
 
-    // Simulate fetching giving summary
     const givingSummary: GivingSummary = {
-        totalDonations: donor.givingSummary?.totalDonations || Math.floor(Math.random() * 5000),
-        lastDonationDate: new Date(),
-        lastDonationAmount: Math.floor(Math.random() * 500),
-        averageGift: Math.floor(Math.random() * 150),
+      totalDonations: donor.givingSummary?.totalDonations || Math.floor(Math.random() * 5000),
+      lastDonationDate: new Date(),
+      lastDonationAmount: Math.floor(Math.random() * 500),
+      averageGift: Math.floor(Math.random() * 150),
     };
+
+    // Simulate fetching past notes
+    const pastNotes = [
+      "Jan 15: Called to thank for EOY gift. Seemed pleased.",
+      "Mar 02: Sent email about the new building fund. Expressed interest in capital projects.",
+      "Apr 20: Met at the gala. Mentioned their daughter is starting college in the fall."
+    ].join('\n');
+    
+    let aiSummary = 'No summary available.';
+    try {
+        const summaryResult = await summarizeNotes({ notes: pastNotes });
+        aiSummary = summaryResult.summary;
+    } catch (e) {
+        console.error("AI summarization failed", e);
+    }
 
     return {
       ...donor,
@@ -77,8 +78,9 @@ export async function enrichDonors(donors: Donor[]): Promise<Donor[]> {
       householdId: donor.householdId || householdId,
       householdName: donor.householdName || householdName,
       givingSummary,
+      aiSummary,
     };
-  });
+  }));
 
   return enrichedDonors;
 }
@@ -87,17 +89,14 @@ export async function syncToBloomerang(campaignName: string, interactions: Inter
   console.log(`Starting sync for campaign: ${campaignName}`);
   console.log(`Found ${interactions.length} interactions to sync.`);
   
-  // Simulate a longer network delay for a "bulk" operation
   await new Promise(resolve => setTimeout(resolve, 2000));
 
-  // Simulate some failures
-  const successes = interactions.filter(() => Math.random() > 0.1); // 90% success rate
+  const successes = interactions.filter(() => Math.random() > 0.1);
   const failures = interactions.length - successes.length;
 
   console.log(`Successfully synced ${successes.length} interactions.`);
   if (failures > 0) {
     console.error(`Failed to sync ${failures} interactions.`);
-    // In a real app, you would implement retry logic or flag these for manual review
     return {
       success: false,
       message: `Synced ${successes.length} interactions, but ${failures} failed.`
