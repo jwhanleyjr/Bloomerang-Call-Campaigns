@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from 'react';
-import { collection, doc, setDoc, addDoc } from 'firebase/firestore';
+import { collection, doc, addDoc } from 'firebase/firestore';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 
 import AppHeader from '@/components/app-header';
@@ -21,33 +21,28 @@ export default function Home() {
     return collection(firestore, 'users', user.uid, 'campaigns');
   }, [firestore, user]);
   
-  const { data: campaigns, isLoading: isLoadingCampaigns } = useCollection<Campaign>(campaignsCollection);
+  const { data: campaigns, isLoading: isLoadingCampaigns, error } = useCollection<Campaign>(campaignsCollection);
 
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
 
   const activeCampaign = useMemo(() => {
-    return campaigns?.find(c => c.id === activeCampaignId) || null;
+    // If there's an activeCampaignId, find the campaign.
+    // The `campaigns` array might not be updated yet if a new campaign was just created,
+    // so we create a placeholder object. The `CallListTable` will then fetch the live data.
+    if (activeCampaignId) {
+        const foundCampaign = campaigns?.find(c => c.id === activeCampaignId);
+        if (foundCampaign) {
+            return foundCampaign;
+        }
+        // If not found (e.g., just created), create a temporary placeholder.
+        // This is a bit of a hack, but it ensures the UI switches immediately.
+        // A better long-term solution might involve a more robust state management library.
+        return { id: activeCampaignId, name: 'Loading Campaign...', createdAt: new Date(), donors: [] };
+    }
+    return null;
   }, [campaigns, activeCampaignId]);
 
-  const handleNewCampaign = async (newCampaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => {
-    if (!campaignsCollection) return;
-    
-    const campaignDocRef = await addDoc(campaignsCollection, {
-      name: newCampaign.name,
-      createdAt: newCampaign.createdAt,
-    });
-    
-    const donorsCollectionRef = collection(firestore, 'users', user.uid, 'campaigns', campaignDocRef.id, 'donors');
-    
-    // Batch write donors
-    for (const donor of newCampaign.donors) {
-      const donorDocRef = doc(donorsCollectionRef, donor.id);
-      setDocumentNonBlocking(donorDocRef, donor, { merge: true });
-    }
 
-    setActiveCampaignId(campaignDocRef.id);
-  };
-  
   const handleSelectCampaign = (campaign: Campaign) => {
     setActiveCampaignId(campaign.id);
   };
@@ -64,7 +59,7 @@ export default function Home() {
   };
   
   const handleInteractionLogged = (donor: Donor, interaction: Interaction) => {
-    if (!activeCampaignId || !user) return;
+    if (!activeCampaignId || !user || !activeCampaign) return;
     
     const newStatus = interaction.followUpDate ? 'follow-up' : 'completed';
     const updatedDonor: Donor = {
@@ -85,7 +80,7 @@ export default function Home() {
             donorId: donor.id,
             donorName: donor.name,
             campaignId: activeCampaignId,
-            campaignName: activeCampaign?.name,
+            campaignName: activeCampaign.name,
             subject: interaction.nextStep,
             dueDate: interaction.followUpDate,
             status: 'Active',
@@ -109,7 +104,6 @@ export default function Home() {
         ) : (
           <CampaignDashboard 
             campaigns={campaigns || []}
-            onNewCampaign={handleNewCampaign}
             onSelectCampaign={handleSelectCampaign}
             isLoading={isLoadingCampaigns}
           />

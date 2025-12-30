@@ -1,14 +1,13 @@
 
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FileUp, FileCheck2, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { FileUp, FileCheck2, ArrowRight, Loader2, Sparkles, AlertTriangle } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import type { Donor, Campaign } from '@/lib/types';
+import type { Donor } from '@/lib/types';
 import { enrichDonors } from '@/app/actions';
 import {
   AlertDialog,
@@ -20,15 +19,16 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog"
+import { Alert, AlertDescription } from './ui/alert';
 
 type FileImporterProps = {
   isOpen: boolean;
   onClose: () => void;
-  onCampaignCreated: (campaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => void;
+  onCampaignCreated: (campaignName: string, donors: Donor[]) => void;
 };
 
 const headerMapping: { [key in keyof Donor]?: string[] } = {
-  id: ['id', 'constituent id', 'account id'],
+  id: ['id', 'constituent id', 'account id', 'bloomerang account id'],
   name: ['name', 'full name'],
   phone: ['phone', 'phone number', 'primary phone'],
   email: ['email', 'email address'],
@@ -38,6 +38,7 @@ enum ImportStep {
   SelectFile,
   Enriching,
   NameCampaign,
+  Error,
 }
 
 export default function FileImporter({ isOpen, onClose, onCampaignCreated }: FileImporterProps) {
@@ -46,6 +47,7 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
   const [fileName, setFileName] = useState<string | null>(null);
   const [importedDonors, setImportedDonors] = useState<Donor[] | null>(null);
   const [campaignName, setCampaignName] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -60,10 +62,17 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
     setFileName(null);
     setImportedDonors(null);
     setCampaignName('');
+    setErrorMessage('');
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
     }
   };
+  
+  const handleError = (message: string) => {
+    setErrorMessage(message);
+    setStep(ImportStep.Error);
+    setIsProcessing(false);
+  }
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -95,7 +104,6 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
           for (const rowKey of rowKeys) {
               if (lowerCaseHeaderMapping[rowKey]) {
                   const donorKey = lowerCaseHeaderMapping[rowKey];
-                  // Find original case key to get value
                   const originalKey = Object.keys(row).find(k => k.toLowerCase() === rowKey);
                   if(originalKey) {
                     // @ts-ignore
@@ -104,7 +112,9 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
               }
           }
           
-          if (!donor.id) donor.id = `generated-${Math.random()}`;
+          // Ensure ID is a string, and generate one if missing (though it's required)
+          if (!donor.id) return null;
+          donor.id = String(donor.id);
           
           donor.givingSummary = {
             totalDonations: 0,
@@ -115,12 +125,10 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
 
           return donor as Donor;
         })
-        .filter(donor => !!donor.id && (!!donor.phone || !!donor.email));
+        .filter((donor): donor is Donor => !!donor && !!donor.id && (!!donor.phone || !!donor.email));
 
       if (donors.length === 0) {
-        alert("No donors with a valid ID and Phone/Email could be found in the uploaded file. Please check the column headers. We're looking for headers like 'ID', 'Name', 'Phone', and 'Email'.");
-        resetState();
-        onClose();
+        handleError("No donors with a valid ID and Phone/Email could be found in the uploaded file. Please check the column headers. We're looking for headers like 'ID', 'Name', 'Phone', and 'Email'.");
         return;
       }
       
@@ -132,9 +140,7 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
       setStep(ImportStep.NameCampaign);
     } catch (error) {
       console.error("Error processing file:", error);
-      alert("There was an error processing your file. Please check that it is a valid Excel file (.xlsx, .xls, .csv) and try again.");
-      resetState();
-      onClose();
+      handleError("There was an error processing your file. Please check that it is a valid Excel file (.xlsx, .xls, .csv) and try again.");
     } finally {
       setIsProcessing(false);
     }
@@ -142,12 +148,7 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
 
   const handleCreateCampaign = () => {
     if (!importedDonors || !campaignName) return;
-    const newCampaign: Omit<Campaign, 'id'> = {
-      name: campaignName,
-      donors: importedDonors,
-      createdAt: new Date(),
-    };
-    onCampaignCreated(newCampaign);
+    onCampaignCreated(campaignName, importedDonors);
   };
 
   const handleButtonClick = () => {
@@ -242,18 +243,43 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
             </div>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleCreateCampaign} disabled={!campaignName}>
-                Create Campaign <ArrowRight className="ml-2"/>
+              <AlertDialogAction onClick={handleCreateCampaign} disabled={!campaignName || isProcessing}>
+                {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <ArrowRight className="mr-2"/>}
+                Create Campaign
               </AlertDialogAction>
             </AlertDialogFooter>
           </>
         );
+        
+      case ImportStep.Error:
+        return (
+          <>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="font-headline text-2xl flex items-center gap-2">
+                <AlertTriangle className="text-destructive" />
+                Import Failed
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                There was a problem with your file upload.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="py-4">
+                <Alert variant="destructive">
+                    <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={onClose}>Close</AlertDialogCancel>
+              <AlertDialogAction onClick={resetState}>Try Again</AlertDialogAction>
+            </AlertDialogFooter>
+          </>
+        )
     }
   }
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={onClose}>
-      <AlertDialogContent onEscapeKeyDown={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
+    <AlertDialog open={isOpen} onOpenChange={(open) => { if(!open) onClose() }}>
+      <AlertDialogContent onEscapeKeyDown={(e) => isProcessing && e.preventDefault()} onPointerDownOutside={(e) => isProcessing && e.preventDefault()}>
         {renderStepContent()}
       </AlertDialogContent>
     </AlertDialog>

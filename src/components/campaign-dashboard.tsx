@@ -9,10 +9,13 @@ import { Progress } from "@/components/ui/progress";
 import FileImporter from './file-importer';
 import type { Campaign, Donor } from '@/lib/types';
 import { format } from 'date-fns';
+import { collection, addDoc } from 'firebase/firestore';
+import { useUser, useFirestore } from '@/firebase';
+import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { useToast } from '@/hooks/use-toast';
 
 type CampaignDashboardProps = {
   campaigns: Campaign[];
-  onNewCampaign: (campaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => void;
   onSelectCampaign: (campaign: Campaign) => void;
   isLoading: boolean;
 };
@@ -23,12 +26,38 @@ function calculateProgress(donors: Donor[] | undefined): number {
   return (completedCount / donors.length) * 100;
 }
 
-export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCampaign, isLoading }: CampaignDashboardProps) {
+export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoading }: CampaignDashboardProps) {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
+  const { user } = useUser();
+  const firestore = useFirestore();
+  const { toast } = useToast();
 
-  const handleCampaignCreated = async (newCampaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => {
-    await onNewCampaign(newCampaign);
-    setIsImporterOpen(false);
+  const handleCampaignCreated = async (campaignName: string, donors: Donor[]) => {
+    if (!user) {
+        toast({ title: 'Error', description: 'You must be logged in to create a campaign.', variant: 'destructive' });
+        return;
+    }
+
+    try {
+        const campaignsCollectionRef = collection(firestore, 'users', user.uid, 'campaigns');
+        const newCampaignData = { name: campaignName, createdAt: new Date() };
+        
+        const campaignDocRef = await addDoc(campaignsCollectionRef, newCampaignData);
+        
+        const donorsCollectionRef = collection(firestore, 'users', user.uid, 'campaigns', campaignDocRef.id, 'donors');
+        
+        for (const donor of donors) {
+            const donorDocRef = doc(donorsCollectionRef, donor.id);
+            setDocumentNonBlocking(donorDocRef, donor, { merge: true });
+        }
+        
+        setIsImporterOpen(false);
+        onSelectCampaign({ id: campaignDocRef.id, ...newCampaignData, donors });
+
+    } catch (error) {
+        console.error("Error creating campaign:", error);
+        toast({ title: 'Error Creating Campaign', description: 'Could not save the new campaign. Please try again.', variant: 'destructive' });
+    }
   };
 
   return (
