@@ -4,14 +4,25 @@
 import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, ArrowRight, FolderKanban, Loader2 } from 'lucide-react';
+import { PlusCircle, ArrowRight, FolderKanban, Loader2, Trash2 } from 'lucide-react';
 import { Progress } from "@/components/ui/progress";
 import FileImporter from './file-importer';
 import type { Campaign, Donor } from '@/lib/types';
 import { format } from 'date-fns';
-import { collection, addDoc, doc, setDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, Timestamp, writeBatch, getDocs, deleteDoc } from 'firebase/firestore';
 import { useUser, useFirestore } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 type CampaignDashboardProps = {
   campaigns: Campaign[];
@@ -39,6 +50,7 @@ const toDate = (date: Date | Timestamp | undefined): Date => {
 
 export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoading }: CampaignDashboardProps) {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
@@ -55,25 +67,19 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
         const campaignsCollectionRef = collection(firestore, 'users', user.uid, 'campaigns');
         const newCampaignData = { name: campaignName, createdAt: new Date() };
         
-        // 1. Create the main campaign document
         const campaignDocRef = await addDoc(campaignsCollectionRef, newCampaignData);
         
-        // 2. Prepare to write all donors to the subcollection
         const donorsCollectionRef = collection(firestore, 'users', user.uid, 'campaigns', campaignDocRef.id, 'donors');
         
         const donorWritePromises: Promise<void>[] = [];
         for (const donor of donors) {
             const donorDocRef = doc(donorsCollectionRef, donor.id);
-            // Use setDoc directly to ensure we can await its completion
             donorWritePromises.push(
               setDoc(donorDocRef, donor, { merge: true }).catch(error => {
                 console.error(`Failed to write donor ${donor.id}:`, error);
-                // We can choose to throw or just log, for now logging.
               })
             );
         }
-
-        // 3. Wait for all donor documents to be written
         await Promise.all(donorWritePromises);
         
         toast({
@@ -81,13 +87,47 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
           description: `"${campaignName}" with ${donors.length} donors has been saved.`
         });
         
-        // 4. Now that all data is saved, navigate to the new campaign.
-        // Pass only the core campaign data. The CallListTable will fetch the donors subcollection.
         onSelectCampaign({ id: campaignDocRef.id, ...newCampaignData });
 
     } catch (error) {
         console.error("Error creating campaign:", error);
         toast({ title: 'Error Creating Campaign', description: 'Could not save the new campaign. Please try again.', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
+    if (!user) return;
+    setIsDeleting(campaignId);
+
+    try {
+      const campaignDocRef = doc(firestore, 'users', user.uid, 'campaigns', campaignId);
+      const donorsCollectionRef = collection(campaignDocRef, 'donors');
+
+      // Delete all donors in a batch
+      const donorsSnapshot = await getDocs(donorsCollectionRef);
+      const deleteBatch = writeBatch(firestore);
+      donorsSnapshot.forEach(donorDoc => {
+        deleteBatch.delete(donorDoc.ref);
+      });
+      await deleteBatch.commit();
+      
+      // After subcollection is deleted, delete the campaign doc itself
+      await deleteDoc(campaignDocRef);
+
+      toast({
+        title: 'Campaign Deleted',
+        description: `"${campaignName}" has been permanently removed.`,
+      });
+
+    } catch (error) {
+      console.error("Error deleting campaign:", error);
+      toast({
+        variant: 'destructive',
+        title: 'Deletion Failed',
+        description: 'Could not delete the campaign. Please try again.',
+      });
+    } finally {
+      setIsDeleting(null);
     }
   };
 
@@ -113,6 +153,7 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
             const progress = calculateProgress(campaign.donors);
             const completedCount = campaign.donors?.filter(d => d.status === 'completed').length || 0;
             const totalDonors = campaign.donors?.length || 0;
+            const isCurrentlyDeleting = isDeleting === campaign.id;
 
             return (
               <Card key={campaign.id} className="flex flex-col">
@@ -134,10 +175,33 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
                     </div>
                   </div>
                 </CardContent>
-                <CardFooter>
-                  <Button variant="outline" className="w-full" onClick={() => onSelectCampaign(campaign)}>
-                    View Campaign <ArrowRight className="ml-2" />
+                <CardFooter className="flex justify-between gap-2">
+                  <Button variant="outline" className="w-full" onClick={() => onSelectCampaign(campaign)} disabled={isCurrentlyDeleting}>
+                    {isCurrentlyDeleting ? <Loader2 className="animate-spin" /> : <>View Campaign <ArrowRight className="ml-2" /></>}
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" size="icon" disabled={isCurrentlyDeleting}>
+                          <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                                This will permanently delete the "{campaign.name}" campaign and all of its associated data, including donor lists and interaction logs. This action cannot be undone.
+                            </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction 
+                              className="bg-destructive hover:bg-destructive/90"
+                              onClick={() => handleDeleteCampaign(campaign.id, campaign.name)}>
+                                Yes, delete campaign
+                            </AlertDialogAction>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </CardFooter>
               </Card>
             );
