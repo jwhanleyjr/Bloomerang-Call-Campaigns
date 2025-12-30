@@ -21,8 +21,8 @@ export const GivingSummarySchema = z.object({
 export const DonorSchema = z.object({
   id: z.string(),
   name: z.string(),
-  phone: z.string(),
-  email: z.string(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
   address: z.string().optional(),
   status: z.enum(['pending', 'completed', 'skipped', 'follow-up']),
   lastInteraction: InteractionSchema.nullable(),
