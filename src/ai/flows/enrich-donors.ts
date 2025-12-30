@@ -39,59 +39,58 @@ export async function enrichDonors(input: z.infer<typeof EnrichDonorsInputSchema
   return enrichDonorsFlow(input);
 }
 
-async function buildEnrichedDonor(donor: Donor): Promise<{ donor: Donor; additionalMembers: Donor[] }> {
-  try {
-    const constituent = await fetchConstituent(donor.id);
-    const normalizedConstituent = normalizeConstituent(constituent);
+async function buildEnrichedDonor(
+  donor: Donor,
+  constituents: Map<string, ReturnType<typeof normalizeConstituent>>,
+  households: Map<string, ReturnType<typeof normalizeHousehold>>
+): Promise<{ donor: Donor; additionalMembers: Donor[] }> {
+  const constituent = constituents.get(donor.id) ?? normalizeConstituent(await fetchConstituent(donor.id));
+  constituents.set(donor.id, constituent);
 
-    let householdName = donor.householdName;
-    let householdMemberIds: string[] = [];
+  let householdName = donor.householdName;
+  let householdMemberIds: string[] = [];
 
-    if (normalizedConstituent.householdId) {
-      const household = await fetchHousehold(normalizedConstituent.householdId);
-      const normalizedHousehold = normalizeHousehold(household);
-      householdName = normalizedHousehold.name || householdName;
-      householdMemberIds = normalizedHousehold.memberIds;
-    }
-
-    const enrichedDonor: Donor = {
-      ...donor,
-      name: normalizedConstituent.name || donor.name,
-      phone: donor.phone || normalizedConstituent.phone || '',
-      email: donor.email || normalizedConstituent.email || '',
-      address: donor.address || normalizedConstituent.address,
-      householdId: normalizedConstituent.householdId || donor.householdId,
-      householdName,
-      givingSummary: mergeGivingSummary(donor.givingSummary, normalizedConstituent.givingSummary as GivingSummary),
-    };
-
-    const additionalMembers: Donor[] = [];
-
-    for (const memberId of householdMemberIds) {
-      if (memberId === enrichedDonor.id) continue;
-
-      const member = await fetchConstituent(memberId);
-      const normalizedMember = normalizeConstituent(member);
-
-      additionalMembers.push({
-        id: normalizedMember.id,
-        name: normalizedMember.name || `Constituent ${normalizedMember.id}`,
-        phone: normalizedMember.phone || '',
-        email: normalizedMember.email || '',
-        address: normalizedMember.address,
-        status: donor.status,
-        lastInteraction: null,
-        givingSummary: mergeGivingSummary(undefined, normalizedMember.givingSummary as GivingSummary),
-        householdId: normalizedMember.householdId || normalizedConstituent.householdId,
-        householdName: householdName || normalizedConstituent.householdName,
-      });
-    }
-
-    return { donor: enrichedDonor, additionalMembers };
-  } catch (error) {
-    console.error('Failed to enrich donor', donor.id, error);
-    return { donor, additionalMembers: [] };
+  if (constituent.householdId) {
+    const household = households.get(constituent.householdId) ?? normalizeHousehold(await fetchHousehold(constituent.householdId));
+    households.set(constituent.householdId, household);
+    householdName = household.name || householdName;
+    householdMemberIds = household.memberIds;
   }
+
+  const enrichedDonor: Donor = {
+    ...donor,
+    name: constituent.name || donor.name,
+    phone: donor.phone || constituent.phone || '',
+    email: donor.email || constituent.email || '',
+    address: donor.address || constituent.address,
+    householdId: constituent.householdId || donor.householdId,
+    householdName,
+    givingSummary: mergeGivingSummary(donor.givingSummary, constituent.givingSummary as GivingSummary),
+  };
+
+  const additionalMembers: Donor[] = [];
+
+  for (const memberId of householdMemberIds) {
+    if (memberId === enrichedDonor.id) continue;
+
+    const member = constituents.get(memberId) ?? normalizeConstituent(await fetchConstituent(memberId));
+    constituents.set(memberId, member);
+
+    additionalMembers.push({
+      id: member.id,
+      name: member.name || `Constituent ${member.id}`,
+      phone: member.phone || '',
+      email: member.email || '',
+      address: member.address,
+      status: donor.status,
+      lastInteraction: null,
+      givingSummary: mergeGivingSummary(undefined, member.givingSummary as GivingSummary),
+      householdId: member.householdId || constituent.householdId,
+      householdName: householdName || constituent.householdName,
+    });
+  }
+
+  return { donor: enrichedDonor, additionalMembers };
 }
 
 export const enrichDonorsFlow = ai.defineFlow(
@@ -102,9 +101,11 @@ export const enrichDonorsFlow = ai.defineFlow(
   },
   async ({ donors }) => {
     const donorMap = new Map<string, Donor>();
+    const constituentCache = new Map<string, ReturnType<typeof normalizeConstituent>>();
+    const householdCache = new Map<string, ReturnType<typeof normalizeHousehold>>();
 
     for (const donor of donors) {
-      const { donor: enrichedDonor, additionalMembers } = await buildEnrichedDonor(donor);
+      const { donor: enrichedDonor, additionalMembers } = await buildEnrichedDonor(donor, constituentCache, householdCache);
 
       donorMap.set(enrichedDonor.id, enrichedDonor);
       additionalMembers.forEach((member) => {

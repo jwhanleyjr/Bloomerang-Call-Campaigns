@@ -71,7 +71,7 @@ const BASE_URL = process.env.BLOOMERANG_API_BASE ?? 'https://api.bloomerang.co';
 export async function fetchConstituent(constituentId: string): Promise<ConstituentApi> {
   const key = getApiKey();
 
-  const response = await fetch(`${BASE_URL}/v2/constituent/${constituentId}`, {
+  const response = await fetch(`${BASE_URL}/constituent/${constituentId}`, {
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ export async function fetchConstituent(constituentId: string): Promise<Constitue
 export async function fetchHousehold(householdId: string): Promise<HouseholdApi> {
   const key = getApiKey();
 
-  const response = await fetch(`${BASE_URL}/v2/household/${householdId}`, {
+  const response = await fetch(`${BASE_URL}/household/${householdId}`, {
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
