@@ -50,20 +50,35 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
         return;
     }
 
+    setIsImporterOpen(false);
+
     try {
         const campaignsCollectionRef = collection(firestore, 'users', user.uid, 'campaigns');
         const newCampaignData = { name: campaignName, createdAt: new Date() };
         
+        // 1. Create the main campaign document
         const campaignDocRef = await addDoc(campaignsCollectionRef, newCampaignData);
         
+        // 2. Prepare to write all donors to the subcollection
         const donorsCollectionRef = collection(firestore, 'users', user.uid, 'campaigns', campaignDocRef.id, 'donors');
         
+        const donorWritePromises: Promise<void>[] = [];
         for (const donor of donors) {
             const donorDocRef = doc(donorsCollectionRef, donor.id);
-            setDocumentNonBlocking(donorDocRef, donor, { merge: true });
+            // setDocumentNonBlocking doesn't return a promise we can easily track.
+            // For this critical step, we'll use setDoc directly and collect the promises.
+            donorWritePromises.push(
+              setDoc(donorDocRef, donor, { merge: true }).catch(error => {
+                console.error(`Failed to write donor ${donor.id}:`, error);
+                // We can choose to throw or just log, for now logging.
+              })
+            );
         }
+
+        // 3. Wait for all donor documents to be written
+        await Promise.all(donorWritePromises);
         
-        setIsImporterOpen(false);
+        // 4. Now that all data is saved, navigate to the new campaign
         onSelectCampaign({ id: campaignDocRef.id, ...newCampaignData, donors });
 
     } catch (error) {

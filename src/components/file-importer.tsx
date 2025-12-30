@@ -27,12 +27,21 @@ type FileImporterProps = {
   onCampaignCreated: (campaignName: string, donors: Donor[]) => void;
 };
 
-const headerMapping: { [key in keyof Donor]?: string[] } = {
-  id: ['id', 'constituent id', 'account id', 'bloomerang account id', 'account number'],
-  name: ['name', 'full name'],
-  phone: ['phone', 'phone number', 'primary phone', 'primary phone number'],
-  email: ['email', 'email address'],
+const headerMapping: { [key: string]: (keyof Donor)[] } = {
+    'account number': ['id'],
+    'id': ['id'],
+    'constituent id': ['id'],
+    'bloomerang account id': ['id'],
+    'name': ['name'],
+    'full name': ['name'],
+    'phone': ['phone'],
+    'phone number': ['phone'],
+    'primary phone': ['phone'],
+    'primary phone number': ['phone'],
+    'email': ['email'],
+    'email address': ['email'],
 };
+
 
 enum ImportStep {
   SelectFile,
@@ -86,35 +95,24 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
       const workbook = XLSX.read(data, { type: 'binary', cellDates: true });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const json = XLSX.utils.sheet_to_json(worksheet) as any[];
-
-      const lowerCaseHeaderMapping: { [key: string]: keyof Donor } = {};
-      for (const key in headerMapping) {
-          const donorKey = key as keyof Donor;
-          headerMapping[donorKey]!.forEach(header => {
-              lowerCaseHeaderMapping[header.toLowerCase()] = donorKey;
-          });
-      }
+      const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" }) as any[];
 
       const donors: Donor[] = json
         .map((row) => {
-          const donor: Partial<Donor> = { status: 'pending', lastInteraction: null };
-          const rowKeys = Object.keys(row).map(k => k.toLowerCase());
-
-          for (const rowKey of rowKeys) {
-              if (lowerCaseHeaderMapping[rowKey]) {
-                  const donorKey = lowerCaseHeaderMapping[rowKey];
-                  const originalKey = Object.keys(row).find(k => k.toLowerCase() === rowKey);
-                  if(originalKey) {
-                    // @ts-ignore
-                    donor[donorKey] = String(row[originalKey]);
+          const donor: Partial<Donor> & { id: string } = { id: '', status: 'pending', lastInteraction: null };
+          
+          for (const header in row) {
+              const lowerCaseHeader = header.toLowerCase().trim();
+              if (headerMapping[lowerCaseHeader]) {
+                  const donorKeys = headerMapping[lowerCaseHeader];
+                  for (const key of donorKeys) {
+                      // @ts-ignore
+                      donor[key] = String(row[header]);
                   }
               }
           }
           
-          // Ensure ID is a string, and generate one if missing (though it's required)
           if (!donor.id) return null;
-          donor.id = String(donor.id);
           
           donor.givingSummary = {
             totalDonations: 0,
@@ -128,7 +126,7 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
         .filter((donor): donor is Donor => !!donor && !!donor.id && (!!donor.phone || !!donor.email));
 
       if (donors.length === 0) {
-        handleError("No donors with a valid ID and Phone/Email could be found in the uploaded file. Please check the column headers. We're looking for headers like 'Account Number', 'Name', and 'Primary Phone Number'.");
+        handleError("No valid donors found. Please ensure the file has a column for 'Account Number' and either 'Primary Phone Number' or 'Email'.");
         return;
       }
       
