@@ -10,11 +10,10 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { DonorSchema, GivingSummarySchema } from '@/lib/schemas';
-import { summarizeNotes } from './summarize-notes';
 
 const EnrichDonorsInputSchema = z.object({
   donors: z.array(DonorSchema),
-  apiKey: z.string().describe("The Bloomerang API key."),
+  apiKey: z.string().describe("The Bloomerang API key.").optional(),
 });
 
 const EnrichDonorsOutputSchema = z.array(DonorSchema);
@@ -26,97 +25,29 @@ export async function enrichDonors(input: z.infer<typeof EnrichDonorsInputSchema
 }
 
 
-// Helper function to fetch from Bloomerang API
-const bloomerangApiFetch = async (endpoint: string, apiKey: string) => {
-    const url = `https://api.bloomerang.co/v2/${endpoint}`;
-    
-    // Correctly import node-fetch for the server-side environment.
-    const fetch = (await import('node-fetch')).default;
-
-    const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'X-API-KEY': apiKey,
-            'Content-Type': 'application/json'
-        },
-    });
-
-    if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`Bloomerang API Error: ${response.status} ${response.statusText}`, errorBody);
-        throw new Error(`Failed to fetch from Bloomerang API: ${endpoint}`);
-    }
-
-    return response.json();
-};
-
-
 export const enrichDonorsFlow = ai.defineFlow(
   {
     name: 'enrichDonorsFlow',
     inputSchema: EnrichDonorsInputSchema,
     outputSchema: EnrichDonorsOutputSchema,
   },
-  async ({ donors, apiKey }) => {
-
-    if (!apiKey) {
-      throw new Error("Bloomerang API key was not provided to the flow.");
-    }
-
-    const enrichedDonors = await Promise.all(donors.map(async (donor) => {
-        // 1. Fetch Constituent
-        const constituent = await bloomerangApiFetch(`constituent/${donor.id}`, apiKey) as any;
-
-        // 2. Fetch Transactions
-        const transactionsData = await bloomerangApiFetch(`transactions?accountId=${donor.id}`, apiKey) as any;
-        const transactions = transactionsData.Results || [];
-
-        let givingSummary: z.infer<typeof GivingSummarySchema> = {
-            totalDonations: 0,
-            lastDonationDate: null,
-            lastDonationAmount: 0,
-            averageGift: 0,
-        };
-
-        if (transactions.length > 0) {
-            const total = transactions.reduce((acc: number, t: any) => acc + t.Amount, 0);
-            const sortedTransactions = [...transactions].sort((a: any, b: any) => new Date(b.Date).getTime() - new Date(a.Date).getTime());
-            const lastTransaction = sortedTransactions[0];
-            
-            givingSummary = {
-                totalDonations: total,
-                lastDonationDate: lastTransaction.Date, // Keep as string
-                lastDonationAmount: lastTransaction.Amount,
-                averageGift: total / transactions.length,
-            };
-        }
-
-        // 3. Fetch Notes and generate AI Summary
-        const notesData = await bloomerangApiFetch(`notes?accountId=${donor.id}`, apiKey) as any;
-        const pastNotes = (notesData.Results || []).map((n: any) => n.Note).join('\n');
-        
-        let aiSummary = 'No past notes to summarize.';
-        if (pastNotes) {
-            try {
-                const summaryResult = await summarizeNotes({ notes: pastNotes });
-                aiSummary = summaryResult.summary;
-            } catch (e) {
-                console.error("AI summarization failed for donor " + donor.id, e);
-                aiSummary = 'Could not generate AI summary.';
-            }
-        }
-
-        // 4. Return enriched donor
-        return {
-            ...donor,
-            address: constituent.PrimaryAddress?.Street || donor.address || 'N/A',
-            email: constituent.PrimaryEmail?.Value || donor.email,
-            phone: constituent.PrimaryPhone?.Number || donor.phone,
-            householdId: constituent.HouseholdId,
-            householdName: constituent.HouseholdName || 'Household',
-            givingSummary,
-            aiSummary,
-        };
+  async ({ donors }) => {
+    // This is a placeholder. The enrichment feature has been disabled due to persistent API errors.
+    // We will return the donors as-is.
+    const enrichedDonors = donors.map(donor => ({
+      ...donor,
+      address: donor.address || 'N/A',
+      email: donor.email,
+      phone: donor.phone,
+      householdId: donor.householdId,
+      householdName: donor.householdName || 'Household',
+      givingSummary: donor.givingSummary || {
+        totalDonations: 0,
+        lastDonationDate: null,
+        lastDonationAmount: 0,
+        averageGift: 0,
+      },
+      aiSummary: donor.aiSummary || 'AI Summary not available.',
     }));
 
     return enrichedDonors;

@@ -45,8 +45,6 @@ const headerMapping: { [key: string]: (keyof Donor)[] } = {
 
 enum ImportStep {
   SelectFile,
-  SetApiKey,
-  Enriching,
   NameCampaign,
   Error,
 }
@@ -56,10 +54,8 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [importedDonors, setImportedDonors] = useState<Donor[] | null>(null);
-  const [rawDonors, setRawDonors] = useState<Donor[] | null>(null);
   const [campaignName, setCampaignName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -73,10 +69,8 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
     setIsProcessing(false);
     setFileName(null);
     setImportedDonors(null);
-    setRawDonors(null);
     setCampaignName('');
     setErrorMessage('');
-    // Do not reset API key
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
     }
@@ -135,8 +129,9 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
         return;
       }
       
-      setRawDonors(donors);
-      setStep(ImportStep.SetApiKey);
+      setImportedDonors(donors);
+      setCampaignName(file.name.replace(/\.(xlsx|xls|csv)$/, ''));
+      setStep(ImportStep.NameCampaign);
 
     } catch (error) {
       console.error("Error processing file:", error);
@@ -146,28 +141,19 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
     }
   };
 
-  const handleEnrichment = async () => {
-      if (!rawDonors || !apiKey) return;
-
-      setIsProcessing(true);
-      setStep(ImportStep.Enriching);
-      
-      try {
-        const enriched = await enrichDonors(rawDonors, apiKey);
-        setImportedDonors(enriched);
-        setCampaignName(fileName?.replace(/\.(xlsx|xls|csv)$/, '') || '');
-        setStep(ImportStep.NameCampaign);
-      } catch (e) {
-          const message = e instanceof Error ? e.message : 'An unknown error occurred during enrichment.';
-          handleError(message);
-      } finally {
-          setIsProcessing(false);
-      }
-  }
-
-  const handleCreateCampaign = () => {
+  const handleCreateCampaign = async () => {
     if (!importedDonors || !campaignName) return;
-    onCampaignCreated(campaignName, importedDonors);
+
+    setIsProcessing(true);
+    try {
+      // We no longer enrich here, just pass the donors directly.
+      onCampaignCreated(campaignName, importedDonors);
+    } catch(e) {
+       const message = e instanceof Error ? e.message : 'An unknown error occurred creating the campaign.';
+       handleError(message);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleButtonClick = () => {
@@ -220,66 +206,13 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
           </>
         );
 
-      case ImportStep.SetApiKey:
-        return (
-            <>
-                <AlertDialogHeader>
-                    <AlertDialogTitle className="font-headline text-2xl">Set API Key</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Enter your Bloomerang API key to enrich your donor data with giving history and household info.
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="py-4 space-y-2">
-                  <Label htmlFor="api-key">Bloomerang API Key</Label>
-                  <div className="relative">
-                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        id="api-key"
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="api_key_..."
-                        className="pl-10"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground pt-2">
-                    Found {rawDonors?.length} donors in <span className="font-bold">{fileName}</span>.
-                  </p>
-                </div>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleEnrichment} disabled={!apiKey || isProcessing}>
-                        {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <Sparkles className="mr-2" />}
-                        Enrich Data
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </>
-        );
-
-      case ImportStep.Enriching:
-        return (
-          <>
-            <AlertDialogHeader>
-              <AlertDialogTitle className="font-headline text-2xl">Enriching Data</AlertDialogTitle>
-              <AlertDialogDescription>
-                Connecting to Bloomerang to get the latest household and giving information...
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="py-8 flex flex-col items-center justify-center text-center">
-              <Sparkles className="w-12 h-12 text-primary animate-pulse mb-4" />
-              <p className="text-lg font-semibold">Enhancing donor profiles...</p>
-              <p className="text-muted-foreground mt-1">This may take a moment.</p>
-            </div>
-          </>
-        );
-
       case ImportStep.NameCampaign:
         return (
            <>
             <AlertDialogHeader>
               <AlertDialogTitle className="font-headline text-2xl">Name Your Campaign</AlertDialogTitle>
               <AlertDialogDescription>
-                Your data has been enriched! Give this campaign a name to save it.
+                Your file has been processed. Give this campaign a name to save it.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="py-4 space-y-4">
@@ -293,7 +226,7 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
                 />
               </div>
               <p className="text-sm text-muted-foreground">
-                Successfully imported and enriched <span className="font-bold text-primary">{importedDonors?.length}</span> donors from <span className="font-bold text-primary">{fileName}</span>.
+                Successfully found <span className="font-bold text-primary">{importedDonors?.length}</span> donors in <span className="font-bold text-primary">{fileName}</span>.
               </p>
             </div>
             <AlertDialogFooter>

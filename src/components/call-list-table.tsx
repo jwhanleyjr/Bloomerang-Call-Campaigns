@@ -315,43 +315,6 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" disabled={isRefreshing}>
-                  {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                  Check for Updates
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Check for Updates</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Enter your Bloomerang API key to refresh donor data. This will fetch the latest giving history and household information.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="py-4 space-y-2">
-                  <Label htmlFor="api-key-refresh">Bloomerang API Key</Label>
-                  <div className='relative'>
-                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="api-key-refresh"
-                      type="password"
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                      className="pl-10"
-                      placeholder="api_key_..."
-                    />
-                  </div>
-                </div>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleRefreshData} disabled={isRefreshing || !apiKey}>
-                    {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                    Refresh Data
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
           </CardFooter>
         </Card>
       </div>
