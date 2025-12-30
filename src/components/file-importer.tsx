@@ -28,9 +28,9 @@ type FileImporterProps = {
 };
 
 const headerMapping: { [key in keyof Donor]?: string[] } = {
-  id: ['id', 'constituent id', 'account id', 'bloomerang account id'],
+  id: ['id', 'constituent id', 'account id', 'bloomerang account id', 'account number'],
   name: ['name', 'full name'],
-  phone: ['phone', 'phone number', 'primary phone'],
+  phone: ['phone', 'phone number', 'primary phone', 'primary phone number'],
   email: ['email', 'email address'],
 };
 
@@ -128,7 +128,7 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
         .filter((donor): donor is Donor => !!donor && !!donor.id && (!!donor.phone || !!donor.email));
 
       if (donors.length === 0) {
-        handleError("No donors with a valid ID and Phone/Email could be found in the uploaded file. Please check the column headers. We're looking for headers like 'ID', 'Name', 'Phone', and 'Email'.");
+        handleError("No donors with a valid ID and Phone/Email could be found in the uploaded file. Please check the column headers. We're looking for headers like 'Account Number', 'Name', and 'Primary Phone Number'.");
         return;
       }
       
