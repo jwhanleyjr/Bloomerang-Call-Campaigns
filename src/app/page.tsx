@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useMemo } from 'react';
-import { collection, doc, addDoc } from 'firebase/firestore';
-import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
+import { useState, useMemo, useEffect } from 'react';
+import { collection, doc } from 'firebase/firestore';
+import { useFirestore, useUser, useCollection, useMemoFirebase, useAuth, initiateAnonymousSignIn } from '@/firebase';
 
 import AppHeader from '@/components/app-header';
 import { Toaster } from '@/components/ui/toaster';
@@ -11,10 +11,19 @@ import type { Donor, Campaign, Interaction } from '@/lib/types';
 import CampaignDashboard from '@/components/campaign-dashboard';
 import CallListTable from '@/components/call-list-table';
 import { setDocumentNonBlocking, addDocumentNonBlocking } from '@/firebase/non-blocking-updates';
+import { Loader2 } from 'lucide-react';
 
 export default function Home() {
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const firestore = useFirestore();
+  const auth = useAuth();
+
+  useEffect(() => {
+    // If auth is loaded and there's no user, sign in anonymously.
+    if (!isUserLoading && !user && auth) {
+      initiateAnonymousSignIn(auth);
+    }
+  }, [isUserLoading, user, auth]);
 
   const campaignsCollection = useMemoFirebase(() => {
     if (!user) return null;
@@ -26,17 +35,11 @@ export default function Home() {
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
 
   const activeCampaign = useMemo(() => {
-    // If there's an activeCampaignId, find the campaign.
-    // The `campaigns` array might not be updated yet if a new campaign was just created,
-    // so we create a placeholder object. The `CallListTable` will then fetch the live data.
     if (activeCampaignId) {
         const foundCampaign = campaigns?.find(c => c.id === activeCampaignId);
         if (foundCampaign) {
             return foundCampaign;
         }
-        // If not found (e.g., just created), create a temporary placeholder.
-        // This is a bit of a hack, but it ensures the UI switches immediately.
-        // A better long-term solution might involve a more robust state management library.
         return { id: activeCampaignId, name: 'Loading Campaign...', createdAt: new Date(), donors: [] };
     }
     return null;
@@ -90,6 +93,13 @@ export default function Home() {
     }
   };
 
+  if (isUserLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
