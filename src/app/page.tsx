@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import { collection, doc } from 'firebase/firestore';
+import { collection, doc, getDocs } from 'firebase/firestore';
 import { useFirestore, useUser, useCollection, useMemoFirebase, useAuth, initiateAnonymousSignIn } from '@/firebase';
 
 import AppHeader from '@/components/app-header';
@@ -19,31 +19,71 @@ export default function Home() {
   const auth = useAuth();
 
   useEffect(() => {
-    // If auth is loaded and there's no user, sign in anonymously.
     if (!isUserLoading && !user && auth) {
       initiateAnonymousSignIn(auth);
     }
   }, [isUserLoading, user, auth]);
 
-  const campaignsCollection = useMemoFirebase(() => {
+  const campaignsCollectionRef = useMemoFirebase(() => {
     if (!user) return null;
     return collection(firestore, 'users', user.uid, 'campaigns');
   }, [firestore, user]);
   
-  const { data: campaigns, isLoading: isLoadingCampaigns, error } = useCollection<Campaign>(campaignsCollection);
+  const { data: rawCampaigns, isLoading: isLoadingCampaigns, error } = useCollection<Campaign>(campaignsCollectionRef);
+  
+  const [campaignsWithDonors, setCampaignsWithDonors] = useState<Campaign[]>([]);
+  const [isDonorLoading, setIsDonorLoading] = useState(true);
+
+  useEffect(() => {
+    if (!rawCampaigns || !user) {
+        setCampaignsWithDonors([]);
+        setIsDonorLoading(!isLoadingCampaigns);
+        return;
+    };
+
+    let isMounted = true;
+    setIsDonorLoading(true);
+
+    const fetchDonorsForAllCampaigns = async () => {
+        const campaignsData = await Promise.all(
+            rawCampaigns.map(async (campaign) => {
+                const donorsCollection = collection(firestore, 'users', user.uid, 'campaigns', campaign.id, 'donors');
+                const donorsSnapshot = await getDocs(donorsCollection);
+                const donors = donorsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Donor));
+                return { ...campaign, donors };
+            })
+        );
+        if (isMounted) {
+            setCampaignsWithDonors(campaignsData);
+            setIsDonorLoading(false);
+        }
+    };
+    
+    fetchDonorsForAllCampaigns();
+
+    return () => {
+        isMounted = false;
+    };
+  }, [rawCampaigns, user, firestore, isLoadingCampaigns]);
+
 
   const [activeCampaignId, setActiveCampaignId] = useState<string | null>(null);
 
   const activeCampaign = useMemo(() => {
     if (activeCampaignId) {
-        const foundCampaign = campaigns?.find(c => c.id === activeCampaignId);
+        const foundCampaign = campaignsWithDonors?.find(c => c.id === activeCampaignId);
         if (foundCampaign) {
             return foundCampaign;
+        }
+         // Fallback for when donors are still loading for the selected campaign
+        const rawCampaign = rawCampaigns?.find(c => c.id === activeCampaignId);
+        if (rawCampaign) {
+            return { ...rawCampaign, donors: [] };
         }
         return { id: activeCampaignId, name: 'Loading Campaign...', createdAt: new Date(), donors: [] };
     }
     return null;
-  }, [campaigns, activeCampaignId]);
+  }, [campaignsWithDonors, rawCampaigns, activeCampaignId]);
 
 
   const handleSelectCampaign = (campaign: Campaign) => {
@@ -59,6 +99,13 @@ export default function Home() {
     
     const donorDocRef = doc(firestore, 'users', user.uid, 'campaigns', activeCampaignId, 'donors', updatedDonor.id);
     setDocumentNonBlocking(donorDocRef, updatedDonor, { merge: true });
+
+    // Optimistically update local state
+    setCampaignsWithDonors(prev => prev.map(c => 
+      c.id === activeCampaignId 
+        ? { ...c, donors: c.donors?.map(d => d.id === updatedDonor.id ? updatedDonor : d) } 
+        : c
+    ));
   };
   
   const handleInteractionLogged = (donor: Donor, interaction: Interaction) => {
@@ -72,11 +119,9 @@ export default function Home() {
     };
     updateDonorInCampaign(updatedDonor);
 
-    // Save the interaction log to a subcollection
     const interactionLogRef = collection(firestore, 'users', user.uid, 'campaigns', activeCampaignId, 'donors', donor.id, 'interactions');
     addDocumentNonBlocking(interactionLogRef, interaction);
     
-    // If there's a follow-up, create a task
     if (interaction.followUpDate && interaction.nextStep) {
         const tasksCollectionRef = collection(firestore, 'users', user.uid, 'tasks');
         addDocumentNonBlocking(tasksCollectionRef, {
@@ -113,9 +158,9 @@ export default function Home() {
           />
         ) : (
           <CampaignDashboard 
-            campaigns={campaigns || []}
+            campaigns={campaignsWithDonors}
             onSelectCampaign={handleSelectCampaign}
-            isLoading={isLoadingCampaigns}
+            isLoading={isLoadingCampaigns || isDonorLoading}
           />
         )}
       </main>

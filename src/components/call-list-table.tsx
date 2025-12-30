@@ -58,14 +58,14 @@ const statusConfig = {
   },
   'follow-up': {
     label: 'Follow-up',
-    icon: <CalendarClock className="w-4 h-4 text-accent-foreground" />,
+    icon: <CalendarClock className="w-4 h-4 text-accent" />,
     badgeVariant: 'accent',
   }
 };
 
 function calculateProgress(donors: Donor[]): number {
   if (donors.length === 0) return 0;
-  const completedCount = donors.filter(d => d.status === 'completed').length;
+  const completedCount = donors.filter(d => d.status === 'completed' || d.status === 'skipped').length;
   return (completedCount / donors.length) * 100;
 }
 
@@ -197,7 +197,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
                 {donor.lastInteraction.outcome?.replace('-', ' ') || 'Note'}
               </span>
               <span className="text-xs text-muted-foreground">
-                {formatDistanceToNow(new Date(donor.lastInteraction.loggedAt), { addSuffix: true })}
+                {formatDistanceToNow(new Date(donor.lastInteraction.loggedAt.toString()), { addSuffix: true })}
               </span>
             </div>
           ) : (
@@ -303,7 +303,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
                   </React.Fragment>
                 );
               } else {
-                return renderDonorRow(item);
+                return renderDonorRow(item as Donor);
               }
             })}
           </TableBody>

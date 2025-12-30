@@ -32,11 +32,10 @@ type CampaignDashboardProps = {
 
 function calculateProgress(donors: Donor[] | undefined): number {
   if (!donors || donors.length === 0) return 0;
-  const completedCount = donors.filter(d => d.status === 'completed').length;
+  const completedCount = donors.filter(d => d.status === 'completed' || d.status === 'skipped').length;
   return (completedCount / donors.length) * 100;
 }
 
-// Helper to safely convert Firestore Timestamp to Date
 const toDate = (date: Date | Timestamp | undefined): Date => {
     if (date instanceof Timestamp) {
       return date.toDate();
@@ -87,7 +86,8 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
           description: `"${campaignName}" with ${donors.length} donors has been saved.`
         });
         
-        onSelectCampaign({ id: campaignDocRef.id, ...newCampaignData });
+        // Don't pass donors here, CallListTable will fetch them.
+        onSelectCampaign({ id: campaignDocRef.id, ...newCampaignData, donors: [] });
 
     } catch (error) {
         console.error("Error creating campaign:", error);
@@ -103,7 +103,6 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
       const campaignDocRef = doc(firestore, 'users', user.uid, 'campaigns', campaignId);
       const donorsCollectionRef = collection(campaignDocRef, 'donors');
 
-      // Delete all donors in a batch
       const donorsSnapshot = await getDocs(donorsCollectionRef);
       const deleteBatch = writeBatch(firestore);
       donorsSnapshot.forEach(donorDoc => {
@@ -111,7 +110,6 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
       });
       await deleteBatch.commit();
       
-      // After subcollection is deleted, delete the campaign doc itself
       await deleteDoc(campaignDocRef);
 
       toast({
@@ -151,7 +149,7 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {campaigns.map(campaign => {
             const progress = calculateProgress(campaign.donors);
-            const completedCount = campaign.donors?.filter(d => d.status === 'completed').length || 0;
+            const completedCount = campaign.donors?.filter(d => d.status === 'completed' || d.status === 'skipped').length || 0;
             const totalDonors = campaign.donors?.length || 0;
             const isCurrentlyDeleting = isDeleting === campaign.id;
 
