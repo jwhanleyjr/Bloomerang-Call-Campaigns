@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import FileImporter from './file-importer';
 import type { Campaign, Donor } from '@/lib/types';
 import { format } from 'date-fns';
-import { collection, addDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, doc, Timestamp } from 'firebase/firestore';
 import { useUser, useFirestore } from '@/firebase';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +25,18 @@ function calculateProgress(donors: Donor[] | undefined): number {
   const completedCount = donors.filter(d => d.status === 'completed').length;
   return (completedCount / donors.length) * 100;
 }
+
+// Helper to safely convert Firestore Timestamp to Date
+const toDate = (date: Date | Timestamp | undefined): Date => {
+    if (date instanceof Timestamp) {
+      return date.toDate();
+    }
+    if (date instanceof Date) {
+      return date;
+    }
+    return new Date();
+};
+
 
 export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoading }: CampaignDashboardProps) {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
@@ -88,7 +100,7 @@ export default function CampaignDashboard({ campaigns, onSelectCampaign, isLoadi
                 <CardHeader>
                   <CardTitle className="font-headline">{campaign.name}</CardTitle>
                   <CardDescription>
-                    Created on {format(new Date(campaign.createdAt.toString()), 'PPP')}
+                    Created on {format(toDate(campaign.createdAt), 'PPP')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow">
