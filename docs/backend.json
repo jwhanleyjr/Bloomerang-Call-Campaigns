@@ -1,0 +1,330 @@
+{
+  "entities": {
+    "Import": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Import",
+      "type": "object",
+      "description": "Represents an uploaded donor report.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the import."
+        },
+        "filename": {
+          "type": "string",
+          "description": "Name of the uploaded file."
+        },
+        "uploadDate": {
+          "type": "string",
+          "description": "Date and time when the report was uploaded.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the import process (e.g., 'pending', 'processing', 'completed', 'failed')."
+        }
+      },
+      "required": [
+        "id",
+        "filename",
+        "uploadDate",
+        "status"
+      ]
+    },
+    "ImportRow": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ImportRow",
+      "type": "object",
+      "description": "Represents a single row from an imported donor report.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the import row."
+        },
+        "importId": {
+          "type": "string",
+          "description": "Reference to Import. (Relationship: Import 1:N ImportRow)"
+        },
+        "donorId": {
+          "type": "string",
+          "description": "The Donor ID from the Bloomerang report, if available."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "Donor's first name."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "Donor's last name."
+        },
+        "email": {
+          "type": "string",
+          "description": "Donor's email address.",
+          "format": "email"
+        },
+        "otherData": {
+          "type": "string",
+          "description": "Any other data from the donor."
+        }
+      },
+      "required": [
+        "id",
+        "importId",
+        "firstName",
+        "lastName"
+      ]
+    },
+    "CallList": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CallList",
+      "type": "object",
+      "description": "Represents a list of donors to call, tied to a specific import.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the call list."
+        },
+        "importId": {
+          "type": "string",
+          "description": "Reference to Import. (Relationship: Import 1:N CallList)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the call list."
+        },
+        "createdDate": {
+          "type": "string",
+          "description": "Date the call list was created.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "importId",
+        "name",
+        "createdDate"
+      ]
+    },
+    "CallListItem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CallListItem",
+      "type": "object",
+      "description": "Represents a single donor in a call list, including their status and notes.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the call list item."
+        },
+        "callListId": {
+          "type": "string",
+          "description": "Reference to CallList. (Relationship: CallList 1:N CallListItem)"
+        },
+        "importRowId": {
+          "type": "string",
+          "description": "Reference to ImportRow. (Relationship: ImportRow 1:N CallListItem)"
+        },
+        "status": {
+          "type": "string",
+          "description": "Status of the call (e.g., 'pending', 'completed', 'skipped')."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Notes about the call."
+        }
+      },
+      "required": [
+        "id",
+        "callListId",
+        "importRowId",
+        "status"
+      ]
+    },
+    "InteractionLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "InteractionLog",
+      "type": "object",
+      "description": "Represents a log of interactions posted to Bloomerang.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the interaction log."
+        },
+        "callListItemId": {
+          "type": "string",
+          "description": "Reference to CallListItem. (Relationship: CallListItem 1:N InteractionLog)"
+        },
+        "bloomerangInteractionId": {
+          "type": "string",
+          "description": "The interaction ID returned by the Bloomerang API."
+        },
+        "interactionType": {
+          "type": "string",
+          "description": "Type of interaction (e.g., 'call', 'note', 'task')."
+        },
+        "interactionDate": {
+          "type": "string",
+          "description": "Date and time of the interaction.",
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Notes associated with the interaction."
+        },
+        "apiResponse": {
+          "type": "string",
+          "description": "The raw API response from Bloomerang."
+        },
+        "createdDate": {
+          "type": "string",
+          "description": "Date the interaction was logged.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "callListItemId",
+        "interactionType",
+        "interactionDate"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}/imports/{importId}",
+        "definition": {
+          "entityName": "Import",
+          "schema": {
+            "$ref": "#/backend/entities/Import"
+          },
+          "description": "Stores uploaded donor reports.  Each user can only access their own imports, governed by path-based ownership. The 'userId' is implicitly tied to 'request.auth.uid'.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the import."
+            },
+            {
+              "name": "importId",
+              "description": "The unique ID of the import."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/imports/{importId}/importRows/{importRowId}",
+        "definition": {
+          "entityName": "ImportRow",
+          "schema": {
+            "$ref": "#/backend/entities/ImportRow"
+          },
+          "description": "Stores individual rows from the uploaded reports. Authorization is inherited from the parent 'import'.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the import."
+            },
+            {
+              "name": "importId",
+              "description": "The unique ID of the import."
+            },
+            {
+              "name": "importRowId",
+              "description": "The unique ID of the import row."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/imports/{importId}/callLists/{callListId}",
+        "definition": {
+          "entityName": "CallList",
+          "schema": {
+            "$ref": "#/backend/entities/CallList"
+          },
+          "description": "Represents lists of donors to call. Authorization is inherited from the parent 'import'.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the import."
+            },
+            {
+              "name": "importId",
+              "description": "The unique ID of the import."
+            },
+            {
+              "name": "callListId",
+              "description": "The unique ID of the call list."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/imports/{importId}/callLists/{callListId}/callListItems/{callListItemId}",
+        "definition": {
+          "entityName": "CallListItem",
+          "schema": {
+            "$ref": "#/backend/entities/CallListItem"
+          },
+          "description": "Represents a single donor in a call list. Authorization is inherited from the parent 'callList' and indirectly from the 'import'.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the import."
+            },
+            {
+              "name": "importId",
+              "description": "The unique ID of the import."
+            },
+            {
+              "name": "callListId",
+              "description": "The unique ID of the call list."
+            },
+            {
+              "name": "callListItemId",
+              "description": "The unique ID of the call list item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/imports/{importId}/callLists/{callListId}/callListItems/{callListItemId}/interactionLogs/{interactionLogId}",
+        "definition": {
+          "entityName": "InteractionLog",
+          "schema": {
+            "$ref": "#/backend/entities/InteractionLog"
+          },
+          "description": "Logs interactions with donors. Authorization is inherited from the parent 'callListItem' and indirectly from the 'callList' and 'import'.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The ID of the user who owns the import."
+            },
+            {
+              "name": "importId",
+              "description": "The unique ID of the import."
+            },
+            {
+              "name": "callListId",
+              "description": "The unique ID of the call list."
+            },
+            {
+              "name": "callListItemId",
+              "description": "The unique ID of the call list item."
+            },
+            {
+              "name": "interactionLogId",
+              "description": "The unique ID of the interaction log."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to support the Bloomerang Call Campaign application, focusing on efficient data retrieval and secure authorization. The core principle is Authorization Independence, achieved through denormalization.  All entities are structured to facilitate flat `list` operations.\n\n**Authorization Independence & QAPs:**\n*   The data structure avoids hierarchical authorization dependencies (no `get()` calls in rules). Each document contains all necessary authorization data.\n*   QAPs are supported by segregating data based on ownership and access control needs.\n\n**Structure Details:**\n*   **Imports:** Stores uploaded donor reports.  Authorization:  Each user can only access their own imports, governed by path-based ownership `/users/{userId}/imports/{importId}`.  The `userId` is implicitly tied to `request.auth.uid`.\n*   **ImportRows:** Stores individual rows from the uploaded reports. Authorization: Inherits authorization from the parent `import`. Includes the `importId` for querying.\n*   **CallLists:** Represents lists of donors to call. Authorization: Inherits authorization from the parent `import`. Includes the `importId` for querying.\n*   **CallListItems:** Represents a single donor in a call list. Authorization: Inherits authorization from the parent `callList` and indirectly from the `import`. Includes the `callListId` for querying.\n*   **InteractionLogs:** Logs interactions with donors. Authorization: Inherits authorization from the parent `callListItem` and indirectly from the `callList` and `import`. Includes the `callListItemId` for querying.\n\nThis structure supports the application's core features:"
+  }
+}
