@@ -43,9 +43,9 @@ export async function logInteraction(input: z.infer<typeof logInteractionSchema>
   return newInteraction;
 }
 
-export async function enrichDonors(donors: Donor[]): Promise<Donor[]> {
+export async function enrichDonors(donors: Donor[], apiKey: string): Promise<Donor[]> {
    try {
-    const enrichedDonors = await enrichDonorsFlow({ donors });
+    const enrichedDonors = await enrichDonorsFlow({ donors, apiKey });
     // The flow returns dates as strings, so we need to convert them back to Date objects
     return enrichedDonors.map(donor => ({
       ...donor,

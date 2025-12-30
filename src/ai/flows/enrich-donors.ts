@@ -8,13 +8,14 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 import { DonorSchema, GivingSummarySchema } from '@/lib/schemas';
 import { summarizeNotes } from './summarize-notes';
 import fetch from 'node-fetch';
 
 const EnrichDonorsInputSchema = z.object({
   donors: z.array(DonorSchema),
+  apiKey: z.string().describe("The Bloomerang API key."),
 });
 
 const EnrichDonorsOutputSchema = z.array(DonorSchema);
@@ -54,11 +55,10 @@ export const enrichDonorsFlow = ai.defineFlow(
     inputSchema: EnrichDonorsInputSchema,
     outputSchema: EnrichDonorsOutputSchema,
   },
-  async ({ donors }) => {
+  async ({ donors, apiKey }) => {
 
-    const apiKey = process.env.BLOOMERANG_API_KEY;
     if (!apiKey) {
-      throw new Error("BLOOMERANG_API_KEY is not configured in the environment.");
+      throw new Error("Bloomerang API key was not provided to the flow.");
     }
 
     const enrichedDonors = await Promise.all(donors.map(async (donor) => {
@@ -108,6 +108,8 @@ export const enrichDonorsFlow = ai.defineFlow(
         return {
             ...donor,
             address: constituent.PrimaryAddress?.Street || donor.address || 'N/A',
+            email: constituent.PrimaryEmail?.Value || donor.email,
+            phone: constituent.PrimaryPhone?.Number || donor.phone,
             householdId: constituent.HouseholdId,
             householdName: constituent.HouseholdName || 'Household',
             givingSummary,
