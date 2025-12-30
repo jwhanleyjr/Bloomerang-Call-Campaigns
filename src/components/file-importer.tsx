@@ -23,15 +23,16 @@ import {
 
 
 type FileImporterProps = {
-  onCampaignCreated: (campaign: Campaign) => void;
+  onCampaignCreated: (campaign: Omit<Campaign, 'id'>) => void;
+  onCancel: () => void;
 };
 
 // Flexible header mapping to find common variations
 const headerMapping: { [key in keyof Donor]?: string[] } = {
   id: ['ID', 'Constituent ID', 'Account ID'],
-  name: ['Name'],
+  name: ['Name', 'Full Name'],
   phone: ['Phone', 'Phone Number', 'Primary Phone'],
-  email: ['Email'],
+  email: ['Email', 'Email Address'],
 };
 
 enum ImportStep {
@@ -40,7 +41,7 @@ enum ImportStep {
   NameCampaign,
 }
 
-export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
+export default function FileImporter({ onCampaignCreated, onCancel }: FileImporterProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [importedDonors, setImportedDonors] = useState<Donor[] | null>(null);
@@ -66,7 +67,6 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
             .map((row) => {
               const donor: Partial<Donor> = { status: 'pending', lastInteraction: null };
               
-              // Find the value for each donor property using the flexible header mapping
               for (const key in headerMapping) {
                 const donorKey = key as keyof Donor;
                 const possibleHeaders = headerMapping[donorKey]!;
@@ -75,7 +75,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
                   if (row[header] !== undefined) {
                     // @ts-ignore
                     donor[donorKey] = String(row[header]);
-                    break; // Move to the next donor property once found
+                    break;
                   }
                 }
               }
@@ -91,7 +91,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
 
               return donor as Donor;
             })
-            .filter(donor => !!donor.id && !!donor.phone); // Only include donors with an ID and a phone number.
+            .filter(donor => !!donor.id && !!donor.phone);
 
           if (donors.length === 0) {
             alert("No donors with a valid ID and Phone Number could be found in the uploaded file. Please check the column headers.");
@@ -107,7 +107,8 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
           setStep(ImportStep.NameCampaign);
         } catch (error) {
           console.error("Error processing file:", error);
-          resetState(); // Reset on error
+          alert("There was an error processing your file. Please check the console for details.");
+          resetState();
         } finally {
           setIsProcessing(false);
         }
@@ -118,8 +119,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
 
   const handleCreateCampaign = () => {
     if (!importedDonors || !campaignName) return;
-    const newCampaign: Campaign = {
-      id: `camp-${Date.now()}`,
+    const newCampaign: Omit<Campaign, 'id'> = {
       name: campaignName,
       donors: importedDonors,
       createdAt: new Date(),
@@ -140,6 +140,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
     if(fileInputRef.current) {
         fileInputRef.current.value = '';
     }
+    onCancel();
   }
   
   const renderStepContent = () => {
@@ -183,7 +184,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
               </div>
             </div>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel onClick={resetState}>Cancel</AlertDialogCancel>
             </AlertDialogFooter>
           </>
         );

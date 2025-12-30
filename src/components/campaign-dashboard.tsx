@@ -96,7 +96,7 @@ export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCa
         </div>
       )}
 
-      {isImporterOpen && <FileImporter onCampaignCreated={handleCampaignCreated} />}
+      {isImporterOpen && <FileImporter onCampaignCreated={handleCampaignCreated} onCancel={() => setIsImporterOpen(false)} />}
     </div>
   );
 }
