@@ -27,7 +27,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { Donor, Interaction } from '@/lib/types';
 import { getAiSuggestion, logInteraction } from '@/app/actions';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 
 const interactionSchema = z.object({
