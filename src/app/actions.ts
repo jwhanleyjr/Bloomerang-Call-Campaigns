@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import fetch from 'node-fetch';
 import { suggestInteractionCompletion, SuggestInteractionCompletionInput } from '@/ai/flows/suggest-interaction-completion';
 import { summarizeNotes } from '@/ai/flows/summarize-notes';
 import type { Interaction, Donor, GivingSummary } from '@/lib/types';
@@ -42,47 +43,98 @@ export async function logInteraction(input: z.infer<typeof logInteractionSchema>
   return newInteraction;
 }
 
-export async function enrichDonors(donors: Donor[]): Promise<Donor[]> {
-  await new Promise(resolve => setTimeout(resolve, 1500));
+const bloomerangApiFetch = async (endpoint: string) => {
+    const url = `https://api.bloomerang.co/v2/${endpoint}`;
+    const apiKey = process.env.BLOOMERANG_API_KEY;
 
-  const enrichedDonors = await Promise.all(donors.map(async (donor) => {
-    const isHousehold = Math.random() > 0.7;
-    const householdId = isHousehold ? `hh-${donor.id.substring(0, 2)}` : undefined;
-    const householdName = isHousehold ? `${donor.name.split(' ')[1]} Household` : undefined;
-
-    const givingSummary: GivingSummary = {
-      totalDonations: donor.givingSummary?.totalDonations || Math.floor(Math.random() * 5000),
-      lastDonationDate: new Date(),
-      lastDonationAmount: Math.floor(Math.random() * 500),
-      averageGift: Math.floor(Math.random() * 150),
-    };
-
-    // Simulate fetching past notes
-    const pastNotes = [
-      "Jan 15: Called to thank for EOY gift. Seemed pleased.",
-      "Mar 02: Sent email about the new building fund. Expressed interest in capital projects.",
-      "Apr 20: Met at the gala. Mentioned their daughter is starting college in the fall."
-    ].join('\n');
+    if (!apiKey) {
+        console.error("BLOOMERANG_API_KEY is not set in .env file");
+        throw new Error("Bloomerang API key is not configured.");
+    }
     
-    let aiSummary = 'No summary available.';
-    try {
-        const summaryResult = await summarizeNotes({ notes: pastNotes });
-        aiSummary = summaryResult.summary;
-    } catch (e) {
-        console.error("AI summarization failed", e);
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'X-API-KEY': apiKey,
+            'Content-Type': 'application/json'
+        },
+    });
+
+    if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(`Bloomerang API Error: ${response.status} ${response.statusText}`, errorBody);
+        throw new Error(`Failed to fetch from Bloomerang API: ${endpoint}`);
     }
 
-    return {
-      ...donor,
-      address: donor.address || '123 Fake St, Anytown USA',
-      householdId: donor.householdId || householdId,
-      householdName: donor.householdName || householdName,
-      givingSummary,
-      aiSummary,
-    };
-  }));
+    return response.json();
+};
 
-  return enrichedDonors;
+export async function enrichDonors(donors: Donor[]): Promise<Donor[]> {
+    const enrichedDonors = await Promise.all(donors.map(async (donor) => {
+        try {
+            // 1. Fetch Constituent
+            const constituent = await bloomerangApiFetch(`constituent/${donor.id}`) as any;
+
+            // 2. Fetch Transactions
+            const transactionsData = await bloomerangApiFetch(`transactions?accountId=${donor.id}`) as any;
+            const transactions = transactionsData.Results || [];
+
+            let givingSummary: GivingSummary = {
+                totalDonations: 0,
+                lastDonationDate: null,
+                lastDonationAmount: 0,
+                averageGift: 0,
+            };
+
+            if (transactions.length > 0) {
+                const total = transactions.reduce((acc: number, t: any) => acc + t.Amount, 0);
+                const sortedTransactions = [...transactions].sort((a: any, b: any) => new Date(b.Date).getTime() - new Date(a.Date).getTime());
+                const lastTransaction = sortedTransactions[0];
+                
+                givingSummary = {
+                    totalDonations: total,
+                    lastDonationDate: new Date(lastTransaction.Date),
+                    lastDonationAmount: lastTransaction.Amount,
+                    averageGift: total / transactions.length,
+                };
+            }
+
+            // 3. Fetch Notes and generate AI Summary
+            const notesData = await bloomerangApiFetch(`notes?accountId=${donor.id}`) as any;
+            const pastNotes = (notesData.Results || []).map((n: any) => n.Note).join('\n');
+            
+            let aiSummary = 'No past notes to summarize.';
+            if (pastNotes) {
+                try {
+                    const summaryResult = await summarizeNotes({ notes: pastNotes });
+                    aiSummary = summaryResult.summary;
+                } catch (e) {
+                    console.error("AI summarization failed for donor " + donor.id, e);
+                    aiSummary = 'Could not generate AI summary.';
+                }
+            }
+
+            // 4. Return enriched donor
+            return {
+                ...donor,
+                address: constituent.PrimaryAddress?.Street || donor.address || 'N/A',
+                householdId: constituent.HouseholdId,
+                householdName: constituent.HouseholdName || 'Household', // Will get from household record later if needed
+                givingSummary,
+                aiSummary,
+            };
+        } catch (error) {
+            console.error(`Failed to enrich donor ${donor.id}:`, error);
+            // Return the original donor object if enrichment fails
+            return {
+                ...donor,
+                aiSummary: 'Failed to fetch donor details from Bloomerang.',
+                givingSummary: donor.givingSummary, // Keep placeholder
+            };
+        }
+    }));
+
+    return enrichedDonors;
 }
 
 export async function syncToBloomerang(campaignName: string, interactions: Interaction[]) {
@@ -91,6 +143,8 @@ export async function syncToBloomerang(campaignName: string, interactions: Inter
   
   await new Promise(resolve => setTimeout(resolve, 2000));
 
+  // This is where you would loop through interactions and POST to /interaction
+  // For now, we continue to simulate this.
   const successes = interactions.filter(() => Math.random() > 0.1);
   const failures = interactions.length - successes.length;
 
