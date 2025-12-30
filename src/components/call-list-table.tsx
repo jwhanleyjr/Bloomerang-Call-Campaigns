@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { collection } from 'firebase/firestore';
+import { collection, doc, writeBatch } from 'firebase/firestore';
 import { useFirestore, useUser, useCollection, useMemoFirebase } from '@/firebase';
 import {
   Table,
@@ -14,14 +14,14 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Phone, CheckCircle, XCircle, Clock, Users, User, UploadCloud, Loader2, CalendarClock } from 'lucide-react';
+import { Phone, CheckCircle, XCircle, Clock, Users, User, UploadCloud, Loader2, CalendarClock, RefreshCw } from 'lucide-react';
 import InteractionLogger from './interaction-logger';
 import type { Donor, Interaction, Campaign } from '@/lib/types';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import { syncToBloomerang } from '@/app/actions';
+import { syncToBloomerang, enrichDonors } from '@/app/actions';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -114,6 +114,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
   const [selectedDonor, setSelectedDonor] = useState<Donor | null>(null);
   const [isLoggerOpen, setIsLoggerOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { toast } = useToast();
 
   const handleLogRowClick = (donor: Donor) => {
@@ -131,6 +132,36 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
     onInteractionLogged(donor, interaction);
     handleLoggerClose();
   };
+
+  const handleRefreshData = async () => {
+    if (!donors || !user || !firestore) return;
+    setIsRefreshing(true);
+    try {
+      const enriched = await enrichDonors(donors);
+      
+      const batch = writeBatch(firestore);
+      enriched.forEach(donor => {
+        const donorRef = doc(firestore, 'users', user.uid, 'campaigns', campaign.id, 'donors', donor.id);
+        batch.set(donorRef, donor, { merge: true });
+      });
+      await batch.commit();
+
+      toast({
+        title: 'Data Refreshed',
+        description: `Successfully updated ${enriched.length} donors with the latest data from Bloomerang.`,
+      });
+    } catch (error) {
+      console.error("Error refreshing donor data:", error);
+      toast({
+        variant: 'destructive',
+        title: 'Refresh Failed',
+        description: 'Could not update donor data from Bloomerang. Please try again.',
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
 
   const handleSync = async () => {
     if (!donors) return;
@@ -172,6 +203,10 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
 
   const renderDonorRow = (donor: Donor, isHouseholdMember: boolean = false) => {
     const status = statusConfig[donor.status];
+    const lastDonationDate = donor.givingSummary?.lastDonationDate
+      ? format(new Date(donor.givingSummary.lastDonationDate.toString()), 'PP')
+      : 'N/A';
+
     return (
       <TableRow key={donor.id} className={isHouseholdMember ? 'bg-muted/50 hover:bg-muted' : ''}>
         <TableCell className={`font-medium ${isHouseholdMember ? 'pl-10' : ''}`}>
@@ -203,6 +238,10 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
           ) : (
             <span className="text-muted-foreground">None</span>
           )}
+        </TableCell>
+        <TableCell className="text-right">{lastDonationDate}</TableCell>
+        <TableCell className="text-right font-mono">
+          ${(donor.givingSummary?.lastDonationAmount || 0).toLocaleString()}
         </TableCell>
         <TableCell className="text-right font-mono">
           ${(donor.givingSummary?.totalDonations || 0).toLocaleString()}
@@ -238,11 +277,11 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
               </div>
             </div>
           </CardHeader>
-          <CardFooter className="border-t pt-4">
+          <CardFooter className="border-t pt-4 flex-wrap gap-2">
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button>
-                  <UploadCloud className="mr-2 h-4 w-4" />
+                <Button disabled={isSyncing}>
+                  {isSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
                   Sync to Bloomerang
                 </Button>
               </AlertDialogTrigger>
@@ -262,19 +301,24 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-
+            <Button variant="outline" onClick={handleRefreshData} disabled={isRefreshing}>
+              {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Check for Updates
+            </Button>
           </CardFooter>
         </Card>
       </div>
 
       <div className="rounded-lg border bg-card text-card-foreground shadow-sm overflow-x-auto">
-        <Table className="w-full min-w-[640px]">
+        <Table className="w-full min-w-[1024px]">
           <TableHeader className="sticky top-0 bg-card z-10">
             <TableRow className="hover:bg-card">
               <TableHead className="w-[250px]">Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Contact</TableHead>
               <TableHead>Last Interaction</TableHead>
+              <TableHead className="text-right">Last Gift Date</TableHead>
+              <TableHead className="text-right">Last Gift Amt</TableHead>
               <TableHead className="text-right">Total Giving</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -282,7 +326,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
           <TableBody>
             {isLoadingDonors && (
                 <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center">
+                    <TableCell colSpan={8} className="h-24 text-center">
                         <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                     </TableCell>
                 </TableRow>
@@ -292,7 +336,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
                 return (
                   <React.Fragment key={`hh-${index}`}>
                     <TableRow className="bg-secondary/50 hover:bg-secondary/80">
-                      <TableCell colSpan={6} className="font-semibold">
+                      <TableCell colSpan={8} className="font-semibold">
                         <div className="flex items-center gap-2">
                           <Users className="w-5 h-5 text-primary" />
                           {item.householdName}
