@@ -26,8 +26,8 @@ function calculateProgress(donors: Donor[] | undefined): number {
 export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCampaign, isLoading }: CampaignDashboardProps) {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
 
-  const handleCampaignCreated = (newCampaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => {
-    onNewCampaign(newCampaign);
+  const handleCampaignCreated = async (newCampaign: Omit<Campaign, 'id' | 'donors'> & {donors: Donor[]}) => {
+    await onNewCampaign(newCampaign);
     setIsImporterOpen(false);
   };
 
@@ -59,7 +59,7 @@ export default function CampaignDashboard({ campaigns, onNewCampaign, onSelectCa
                 <CardHeader>
                   <CardTitle className="font-headline">{campaign.name}</CardTitle>
                   <CardDescription>
-                    Created on {format(new Date(campaign.createdAt), 'PPP')}
+                    Created on {format(new Date(campaign.createdAt.toString()), 'PPP')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-grow">
