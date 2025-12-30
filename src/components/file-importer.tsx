@@ -150,14 +150,15 @@ export default function FileImporter({ isOpen, onClose, onCampaignCreated }: Fil
     try {
       let donorsToSave = importedDonors;
 
-      try {
-        donorsToSave = await enrichDonors(importedDonors);
-      } catch (error) {
-        console.error("Error enriching donors:", error);
+      const { donors: enrichedDonors, error: enrichmentError } = await enrichDonors(importedDonors);
+      donorsToSave = enrichedDonors;
+
+      if (enrichmentError) {
+        console.error("Error enriching donors:", enrichmentError);
         toast({
           variant: 'destructive',
           title: 'Enhancement Failed',
-          description: 'Campaign created with uploaded data only. Please check server logs or your BLOOMERANG_API_KEY and try again.',
+          description: `${enrichmentError} Campaign created with uploaded data only.`,
         });
       }
 

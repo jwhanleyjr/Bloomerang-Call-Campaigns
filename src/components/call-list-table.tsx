@@ -146,7 +146,15 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
     setIsRefreshing(true);
     try {
       // This function fetches the latest data from Bloomerang
-      const enriched = await enrichDonors(donors);
+      const { donors: enriched, error: enrichmentError } = await enrichDonors(donors);
+
+      if (enrichmentError) {
+        toast({
+          variant: 'destructive',
+          title: 'Partial Refresh',
+          description: enrichmentError,
+        });
+      }
       
       // Write the updated data back to Firestore
       const batch = writeBatch(firestore);
