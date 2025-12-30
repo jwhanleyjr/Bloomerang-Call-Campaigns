@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import FileImporter from './file-importer';
 import type { Campaign, Donor } from '@/lib/types';
 import { format } from 'date-fns';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc, doc } from 'firebase/firestore';
 import { useUser, useFirestore } from '@/firebase';
 import { setDocumentNonBlocking } from '@/firebase/non-blocking-updates';
 import { useToast } from '@/hooks/use-toast';
