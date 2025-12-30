@@ -1,3 +1,4 @@
+
 'use server';
 
 import { z } from 'zod';
@@ -45,10 +46,10 @@ export async function logInteraction(input: z.infer<typeof logInteractionSchema>
 
 const bloomerangApiFetch = async (endpoint: string) => {
     const url = `https://api.bloomerang.co/v2/${endpoint}`;
-    const apiKey = process.env.NEXT_PUBLIC_BLOOMERANG_API_KEY;
+    const apiKey = process.env.BLOOMERANG_API_KEY;
 
     if (!apiKey) {
-        console.error("NEXT_PUBLIC_BLOOMERANG_API_KEY is not set in .env file");
+        console.error("BLOOMERANG_API_KEY is not set in .env file");
         throw new Error("Bloomerang API key is not configured.");
     }
     
