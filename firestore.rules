@@ -72,89 +72,47 @@ service cloud.firestore {
      * @description Rules for an individual user's data tree. The entire tree
      *              is private and owned by the user.
      * @path /users/{userId}
-     * @allow (n/a) - No direct writes to the user document are defined in the schema.
      * @deny (any) - Any attempt to read or write directly to a /users/{userId} document.
      * @principle Establishes the root of the user-owned data hierarchy.
      */
     match /users/{userId} {
-      // A user document does not seem to exist based on the IR.
-      // Deny all direct reads/writes to prevent users from creating/deleting their root doc arbitrarily.
-      // Subcollection access is handled by the nested rules below.
       allow get, list, create, update, delete: if false;
 
       /**
-       * @description Stores an uploaded donor report. Only the user who uploaded it can access it.
-       * @path /users/{userId}/imports/{importId}
-       * @allow An authenticated user (uid: 'user123') can (create) their own import at '/users/user123/imports/import456'.
-       * @deny An authenticated user (uid: 'userABC') cannot (get) an import at '/users/user123/imports/import456'.
-       * @principle Restricts access to a user's own data tree using path-based ownership.
+       * @description Stores user-created call campaigns. Only the owner can access them.
+       * @path /users/{userId}/campaigns/{campaignId}
+       * @allow An authenticated user can manage their own campaigns.
+       * @deny Another user cannot access or modify campaigns they don't own.
        */
-      match /imports/{importId} {
-        allow get: if isOwner(userId);
-        allow list: if isOwner(userId);
-        allow create: if isOwner(userId);
-        allow update: if isExistingOwner(userId);
-        allow delete: if isExistingOwner(userId);
+      match /campaigns/{campaignId} {
+        allow read, write: if isOwner(userId);
 
         /**
-         * @description Stores individual rows from an uploaded report. Authorization is inherited from the parent import.
-         * @path /users/{userId}/imports/{importId}/importRows/{importRowId}
-         * @allow An authenticated user (uid: 'user123') can (list) rows from their own import at '/users/user123/imports/import456/importRows'.
-         * @deny An authenticated user (uid: 'userABC') cannot (update) a row at '/users/user123/imports/import456/importRows/row789'.
-         * @principle Inherits ownership from the parent document's path and validates relational integrity.
+         * @description Stores individual donors within a campaign. Authorization is inherited.
+         * @path /users/{userId}/campaigns/{campaignId}/donors/{donorId}
+         * @allow The campaign owner can manage the donors within their campaign.
          */
-        match /importRows/{importRowId} {
-          allow get: if isOwner(userId);
-          allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && request.resource.data.importId == importId;
-          allow update: if isExistingOwner(userId) && request.resource.data.importId == resource.data.importId;
-          allow delete: if isExistingOwner(userId);
-        }
-
-        /**
-         * @description Represents a list of donors to call. Authorization is inherited from the parent import.
-         * @path /users/{userId}/imports/{importId}/callLists/{callListId}
-         * @allow An authenticated user (uid: 'user123') can (create) a new call list within their own import.
-         * @deny Another user (uid: 'userABC') cannot (delete) a call list from '/users/user123/imports/import456/callLists/list789'.
-         * @principle Inherits ownership from the parent document's path and validates relational integrity.
-         */
-        match /callLists/{callListId} {
-          allow get: if isOwner(userId);
-          allow list: if isOwner(userId);
-          allow create: if isOwner(userId) && request.resource.data.importId == importId;
-          allow update: if isExistingOwner(userId) && request.resource.data.importId == resource.data.importId;
-          allow delete: if isExistingOwner(userId);
+        match /donors/{donorId} {
+          allow read, write: if isOwner(userId);
 
           /**
-           * @description Represents a single donor in a call list. Authorization is inherited from the parent call list.
-           * @path /users/{userId}/imports/{importId}/callLists/{callListId}/callListItems/{callListItemId}
-           * @allow The owner (uid: 'user123') can (update) the status of a call list item at '.../callListItems/itemXYZ'.
-           * @deny Any other user cannot read or write to that same item.
-           * @principle Enforces deep, inherited ownership and validates relational integrity.
+           * @description Logs interactions with donors. Authorization is inherited.
+           * @path /users/{userId}/campaigns/{campaignId}/donors/{donorId}/interactions/{interactionId}
+           * @allow The campaign owner can manage interaction logs for their donors.
            */
-          match /callListItems/{callListItemId} {
-            allow get: if isOwner(userId);
-            allow list: if isOwner(userId);
-            allow create: if isOwner(userId) && request.resource.data.callListId == callListId;
-            allow update: if isExistingOwner(userId) && request.resource.data.callListId == resource.data.callListId;
-            allow delete: if isExistingOwner(userId);
-
-            /**
-             * @description Logs interactions with donors. Authorization is inherited from the parent call list item.
-             * @path .../callListItems/{callListItemId}/interactionLogs/{interactionLogId}
-             * @allow The owner (uid: 'user123') can (create) a new interaction log for one of their call list items.
-             * @deny An anonymous user cannot access any interaction log.
-             * @principle Enforces deep, inherited ownership and validates relational integrity.
-             */
-            match /interactionLogs/{interactionLogId} {
-              allow get: if isOwner(userId);
-              allow list: if isOwner(userId);
-              allow create: if isOwner(userId) && request.resource.data.callListItemId == callListItemId;
-              allow update: if isExistingOwner(userId) && request.resource.data.callListItemId == resource.data.callListItemId;
-              allow delete: if isExistingOwner(userId);
-            }
+          match /interactions/{interactionId} {
+            allow read, write: if isOwner(userId);
           }
         }
+      }
+
+      /**
+       * @description Stores user-specific follow-up tasks.
+       * @path /users/{userId}/tasks/{taskId}
+       * @allow The user can manage their own tasks.
+       */
+      match /tasks/{taskId} {
+        allow read, write: if isOwner(userId);
       }
     }
   }
