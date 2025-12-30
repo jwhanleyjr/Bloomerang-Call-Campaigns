@@ -89,15 +89,20 @@ function groupDonors(donors: Donor[]): (Donor | { isHousehold: true; householdNa
   
   Object.values(households).forEach(members => {
     if (members.length > 1) {
-      groupedList.push({ isHousehold: true, householdName: members[0].householdName || 'Household', members });
+      // Sort members within the household to be consistent
+      const sortedMembers = members.sort((a,b) => a.name.localeCompare(b.name));
+      groupedList.push({ isHousehold: true, householdName: sortedMembers[0].householdName || 'Household', members: sortedMembers });
     } else {
       // If a household has only one member from the list, treat as individual
       individuals.push(...members);
     }
   });
   
-  // Sort individuals to appear after households
-  return [...groupedList, ...individuals.sort((a,b) => a.name.localeCompare(b.name))];
+  // Sort individuals and households to have a consistent order
+  const sortedHouseholds = groupedList.sort((a, b) => (a as any).householdName.localeCompare((b as any).householdName));
+  const sortedIndividuals = individuals.sort((a,b) => a.name.localeCompare(b.name));
+  
+  return [...sortedHouseholds, ...sortedIndividuals];
 }
 
 export default function CallListTable({ campaign, onUpdateDonor, onInteractionLogged }: CallListTableProps) {
@@ -109,6 +114,7 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
     return collection(firestore, 'users', user.uid, 'campaigns', campaign.id, 'donors');
   }, [firestore, user, campaign.id]);
   
+  // This hook now serves as the single source of truth for donor data.
   const { data: donors, isLoading: isLoadingDonors } = useCollection<Donor>(donorsCollectionRef);
 
   const [selectedDonor, setSelectedDonor] = useState<Donor | null>(null);
@@ -137,14 +143,19 @@ export default function CallListTable({ campaign, onUpdateDonor, onInteractionLo
     if (!donors || !user || !firestore) return;
     setIsRefreshing(true);
     try {
+      // This function fetches the latest data from Bloomerang
       const enriched = await enrichDonors(donors);
       
+      // Write the updated data back to Firestore
       const batch = writeBatch(firestore);
       enriched.forEach(donor => {
         const donorRef = doc(firestore, 'users', user.uid, 'campaigns', campaign.id, 'donors', donor.id);
         batch.set(donorRef, donor, { merge: true });
       });
       await batch.commit();
+
+      // The useCollection hook will automatically detect the changes in Firestore and update the UI.
+      // No manual state update is needed.
 
       toast({
         title: 'Data Refreshed',
