@@ -11,7 +11,6 @@ import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 import { DonorSchema, GivingSummarySchema } from '@/lib/schemas';
 import { summarizeNotes } from './summarize-notes';
-import fetch from 'node-fetch';
 
 const EnrichDonorsInputSchema = z.object({
   donors: z.array(DonorSchema),
@@ -31,6 +30,9 @@ export async function enrichDonors(input: z.infer<typeof EnrichDonorsInputSchema
 const bloomerangApiFetch = async (endpoint: string, apiKey: string) => {
     const url = `https://api.bloomerang.co/v2/${endpoint}`;
     
+    // Correctly import node-fetch for the server-side environment.
+    const fetch = (await import('node-fetch')).default;
+
     const response = await fetch(url, {
         method: 'GET',
         headers: {
