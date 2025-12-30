@@ -26,15 +26,12 @@ type FileImporterProps = {
   onCampaignCreated: (campaign: Campaign) => void;
 };
 
-// Map Excel headers to Donor object keys
-const headerMapping: { [key: string]: keyof Donor } = {
-  'ID': 'id',
-  'Name': 'name',
-  'Phone': 'phone',
-  'Email': 'email',
-  // We'll get financial data from the enrichment step
-  // 'Total Donated': 'totalDonations',
-  // 'Last Donation Date': 'lastDonationDate',
+// Flexible header mapping to find common variations
+const headerMapping: { [key in keyof Donor]?: string[] } = {
+  id: ['ID', 'Constituent ID', 'Account ID'],
+  name: ['Name'],
+  phone: ['Phone', 'Phone Number', 'Primary Phone'],
+  email: ['Email'],
 };
 
 enum ImportStep {
@@ -64,35 +61,49 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           const json = XLSX.utils.sheet_to_json(worksheet) as any[];
-          
-          const donors: Donor[] = json.map((row) => {
-            const donor: Partial<Donor> = { status: 'pending', lastInteraction: null };
-            for (const excelHeader in headerMapping) {
-              if (row[excelHeader] !== undefined) {
-                const donorKey = headerMapping[excelHeader];
-                let value = row[excelHeader];
-                // @ts-ignore
-                donor[donorKey] = value;
+
+          const donors: Donor[] = json
+            .map((row) => {
+              const donor: Partial<Donor> = { status: 'pending', lastInteraction: null };
+              
+              // Find the value for each donor property using the flexible header mapping
+              for (const key in headerMapping) {
+                const donorKey = key as keyof Donor;
+                const possibleHeaders = headerMapping[donorKey]!;
+                
+                for (const header of possibleHeaders) {
+                  if (row[header] !== undefined) {
+                    // @ts-ignore
+                    donor[donorKey] = String(row[header]);
+                    break; // Move to the next donor property once found
+                  }
+                }
               }
-            }
-            if (!donor.id) donor.id = `generated-${Math.random()}`;
-            
-            // Add a placeholder giving summary, to be filled by enrichment
-            donor.givingSummary = {
-              totalDonations: 0,
-              lastDonationDate: null,
-              lastDonationAmount: 0,
-              averageGift: 0,
-            };
 
-            return donor as Donor;
-          }).filter(donor => !!donor.phone); // Only include donors with a phone number.
+              if (!donor.id) donor.id = `generated-${Math.random()}`;
+              
+              donor.givingSummary = {
+                totalDonations: 0,
+                lastDonationDate: null,
+                lastDonationAmount: 0,
+                averageGift: 0,
+              };
 
+              return donor as Donor;
+            })
+            .filter(donor => !!donor.id && !!donor.phone); // Only include donors with an ID and a phone number.
+
+          if (donors.length === 0) {
+            alert("No donors with a valid ID and Phone Number could be found in the uploaded file. Please check the column headers.");
+            resetState();
+            return;
+          }
+          
           setStep(ImportStep.Enriching);
           const enriched = await enrichDonors(donors);
           
           setImportedDonors(enriched);
-          setCampaignName(file.name.replace(/\.(xlsx|xls)$/, ''));
+          setCampaignName(file.name.replace(/\.(xlsx|xls|csv)$/, ''));
           setStep(ImportStep.NameCampaign);
         } catch (error) {
           console.error("Error processing file:", error);
@@ -149,7 +160,7 @@ export default function FileImporter({ onCampaignCreated }: FileImporterProps) {
                   ref={fileInputRef}
                   onChange={handleFileSelect}
                   className="hidden"
-                  accept=".xlsx, .xls"
+                  accept=".xlsx, .xls, .csv"
                   disabled={isProcessing}
                 />
                  <div className="mx-auto bg-secondary p-3 rounded-full mb-4">
